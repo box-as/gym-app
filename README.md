@@ -1,4 +1,4 @@
-# RepState — 44-week progress tracker
+# RepState — 44-week progress tracker (hypertrophy app)
 
 RepState is a browser-based hypertrophy tracker with a 44-week plan, workout logs, check-ins, milestones, and progress analytics. It can run in local-only mode or as a self-hosted app with private cross-device sync.
 
