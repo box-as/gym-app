@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101918">
+  <meta name="description" content="A personal 44-week hypertrophy training log with workout tracking, check-ins, milestones, and progress analytics.">
+  <title>RepState — 44-week progress tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#overview" aria-label="RepState home">
+        <span class="brand-mark"><span>R</span><i></i></span>
+        <span class="brand-copy"><strong>repstate</strong><small>44-week hypertrophy</small></span>
+      </a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="primary-nav" aria-label="Main navigation">
+        <button class="nav-link active" data-page="overview"><span class="nav-icon">◫</span><span>Overview</span></button>
+        <button class="nav-link" data-page="training"><span class="nav-icon">↗</span><span>Training log</span><span class="nav-count" id="nav-week">W01</span></button>
+        <button class="nav-link" data-page="analytics"><span class="nav-icon">⌁</span><span>Analytics</span></button>
+        <button class="nav-link" data-page="checkins"><span class="nav-icon">◉</span><span>Weekly check-in</span></button>
+        <button class="nav-link" data-page="program"><span class="nav-icon">▤</span><span>Program guide</span></button>
+        <a class="nav-link" href="/reference.html"><span class="nav-icon">▣</span><span>Full program reference</span></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="cycle-mini">
+          <div class="cycle-mini-top"><span>CURRENT CYCLE</span><span id="sidebar-week">01 / 44</span></div>
+          <div class="mini-track"><span id="sidebar-progress"></span></div>
+          <p id="sidebar-block">Block 1 · Rebuild</p>
+        </div>
+        <div class="privacy-note"><span class="privacy-dot"></span><span>Saved on this device<br><small>Sign in to enable private sync</small></span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation">☰</button>
+          <div class="crumb"><span>TRAINING CYCLE</span><strong id="page-name">Overview</strong></div>
+        </div>
+        <div class="topbar-actions">
+          <span class="saved-status"><i></i> Saved locally</span>
+          <button class="button button-quiet" data-action="export">Export backup</button>
+          <button class="icon-button settings-trigger" data-action="settings" aria-label="Settings" title="Settings">⚙</button>
+        </div>
+      </header>
+      <div id="app" class="page-wrap" aria-live="polite"></div>
+      <footer class="mobile-nav" aria-label="Mobile navigation">
+        <button class="mobile-nav-link active" data-page="overview"><span>◫</span>Home</button>
+        <button class="mobile-nav-link" data-page="training"><span>↗</span>Train</button>
+        <button class="mobile-nav-link" data-page="analytics"><span>⌁</span>Stats</button>
+        <button class="mobile-nav-link" data-page="checkins"><span>◉</span>Check-in</button>
+        <button class="mobile-nav-link" data-page="program"><span>▤</span>Guide</button>
+      </footer>
+    </main>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
