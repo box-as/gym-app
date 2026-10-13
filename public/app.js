@@ -15,6 +15,7 @@
   let stateSnapshot = JSON.parse(JSON.stringify(state));
   const syncInfo = { loggedIn: false, username: '', lastUsername: '', legacy: false, authMode: 'login', busy: false, timer: null, pending: false };
   let toastTimer;
+  let localEditRevision = 0;
 
   function loadState(key=STORAGE_KEY) {
     try {
@@ -46,6 +47,7 @@
     if (status) { status.innerHTML = `<i></i> ${esc(label)}`; status.classList.toggle('saving', saving); }
   }
   function persist() {
+    localEditRevision++;
     noteChangedData();
     localStorage.setItem(currentStorageKey(), JSON.stringify(state));
     setSavedStatus(syncInfo.loggedIn ? 'Saved locally · syncing' : 'Saved locally');
@@ -89,7 +91,17 @@
     const n = (String(value || '').match(/\d+/g) || ['1']).map(Number);
     return Math.max(1, Math.min(5, ...[Math.max(...n)]));
   }
-  function statusOf(id) { return state.logs[id]?.status || 'Planned'; }
+  function automaticExerciseStatus(row, entry) {
+    if (!loggedSetCount(entry)) return entry?.status || 'Planned';
+    const required = maxSets(getPrescription(row, row.week).sets);
+    const completed = Array.from({ length: required }, (_, i) => Number(entry.sets?.[i]?.reps) > 0).filter(Boolean).length;
+    return completed === required ? 'Done' : 'Partial';
+  }
+  function statusOf(id) {
+    const entry = state.logs[id];
+    const row = program?.exercises?.find(exercise => exercise.id === id);
+    return row ? automaticExerciseStatus(row, entry) : entry?.status || 'Planned';
+  }
   function loggedSetCount(entry) { return (entry?.sets || []).filter(s => s && (s.reps !== '' && s.reps != null || s.load !== '' && s.load != null)).length; }
   function setCountForWeek(w) {
     return Object.entries(state.logs).filter(([id, v]) => id.startsWith(`${w}:`)).reduce((n, [,v]) => n + loggedSetCount(v), 0);
@@ -284,12 +296,14 @@
   }
   function renderExerciseCard(row, index, w) {
     const entry=state.logs[row.id]||{status:'Planned',sets:[]};
+    const status=statusOf(row.id);
     const rx=getPrescription(row,w), count=maxSets(rx.sets);
     const isOpen=state.ui.quickLog!==false||state.ui.openExercise===row.id;
+    const skipButton=(status==='Planned'||status==='Skipped')&&!loggedSetCount(entry)?`<button type="button" class="skip-exercise" data-action="toggle-skip" data-id="${esc(row.id)}">${status==='Skipped'?'Undo skip':'Skip'}</button>`:'';
     const sets=Array.from({length:count},(_,i)=>entry.sets?.[i]||{});
     const setRows=sets.map((s,i)=>`<div class="set-label">Set ${i+1}</div><input class="input" type="number" inputmode="decimal" step="any" min="0" placeholder="${esc(state.settings.loadUnit)}" aria-label="Set ${i+1} load" data-set="${i}" data-field="load" value="${esc(s.load??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" placeholder="reps" aria-label="Set ${i+1} reps" data-set="${i}" data-field="reps" value="${esc(s.reps??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" max="10" placeholder="RIR" aria-label="Set ${i+1} reps in reserve" data-set="${i}" data-field="rir" value="${esc(s.rir??'')}">`).join('');
     const toggle=state.ui.quickLog===false?`<button class="expand-button" data-action="toggle-exercise" data-id="${esc(row.id)}" aria-label="${isOpen?'Hide':'Show'} set log">${isOpen?'−':'+'}</button>`:'';
-    return `<article class="exercise-card" data-card="${esc(row.id)}"><div class="exercise-main"><div class="exercise-index">${String(index+1).padStart(2,'0')}</div><div class="exercise-content"><div class="exercise-title-row"><span class="exercise-title">${esc(row.exercise)}</span><span class="status-pill ${esc(entry.status)}">${esc(entry.status)}</span></div><div class="exercise-meta"><span>${esc(rx.sets)} sets · ${esc(rx.reps)} reps</span><span>${esc(rx.rir)} RIR</span><span>Rest ${esc(row.rest||'—')}</span><span>${esc(muscleOf(row.exercise))}</span></div><p class="exercise-cue">${esc(row.cue||'Log load, reps, and RIR for each working set.')}</p></div><div class="exercise-controls"><select class="select status-select" aria-label="Exercise status" data-status="${esc(row.id)}"><option ${entry.status==='Planned'?'selected':''}>Planned</option><option ${entry.status==='Done'?'selected':''}>Done</option><option ${entry.status==='Partial'?'selected':''}>Partial</option><option ${entry.status==='Skipped'?'selected':''}>Skipped</option></select>${toggle}</div></div>${isOpen?`<div class="exercise-details"><div class="set-grid"><div></div><div class="set-grid-head">Load (${esc(state.settings.loadUnit)})</div><div class="set-grid-head">Reps</div><div class="set-grid-head">RIR <span>(optional)</span></div>${setRows}</div><div class="exercise-foot"><small>Saved automatically on this device · RIR is optional.</small><small>Progression: reach the top of the rep range on all sets before adding load.</small></div></div>`:''}</article>`;
+    return `<article class="exercise-card" data-card="${esc(row.id)}"><div class="exercise-main"><div class="exercise-index">${String(index+1).padStart(2,'0')}</div><div class="exercise-content"><div class="exercise-title-row"><span class="exercise-title">${esc(row.exercise)}</span><span class="status-pill ${esc(status)}">${esc(status)}</span></div><div class="exercise-meta"><span>${esc(rx.sets)} sets · ${esc(rx.reps)} reps</span><span>${esc(rx.rir)} RIR</span><span>Rest ${esc(row.rest||'—')}</span><span>${esc(muscleOf(row.exercise))}</span></div><p class="exercise-cue">${esc(row.cue||'Log load, reps, and RIR for each working set.')}</p></div><div class="exercise-controls">${skipButton}${toggle}</div></div>${isOpen?`<div class="exercise-details"><div class="set-grid"><div></div><div class="set-grid-head">Load (${esc(state.settings.loadUnit)})</div><div class="set-grid-head">Reps</div><div class="set-grid-head">RIR <span>(optional)</span></div>${setRows}</div><div class="exercise-foot"><small>Autosaves as you type. Enter reps for each set to mark this exercise done; RIR is optional.</small><small>Progression: reach the top of the rep range on all sets before adding load.</small></div></div>`:''}</article>`;
   }
   function renderTraining() {
     const w=selectedWeek(), rows=weekRows(w), days=uniqueDays(w);
@@ -304,8 +318,8 @@
     const suggestedDate=sessionDate(w,chosen)||(weekday>=1&&weekday<=5&&days.indexOf(chosen)===todayIndex?todayISO():'');
     const canCopy=list.some(row=>previousLoggedRow(row,w));
     app.innerHTML=`${pageHead('TRAINING LOG',`${weekLabel(w)} · ${activeBlock(w)}`,`${isDeload?'Scheduled deload week':phase+' phase'} · ${rows.length} exercise entries across five training days`,right)}
-      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status ${dayStat.toLowerCase()}">${esc(dayStat)}</span></div></div><div class="day-tabs">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><label class="training-summary" for="session-date">Session date</label><input id="session-date" class="input" type="date" style="width:auto;min-width:135px" value="${esc(suggestedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}">${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">Set edits save instantly in this browser. ${canCopy?'Copy previous numbers to prefill, then adjust to match today’s performance.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
-      <div class="two-col"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Week summary</h2><p class="panel-sub">A session counts complete when every planned exercise is marked done.</p></div></div><div class="goal-strip"><div class="goal-item"><span>Completed</span><strong>${stat.done} / ${stat.total} sessions</strong></div><div class="goal-item"><span>Partial</span><strong>${stat.partial} sessions</strong></div><div class="goal-item"><span>Logged work sets</span><strong>${stat.sets}</strong></div><div class="goal-item"><span>Cycle week</span><strong>${String(w).padStart(2,'0')} / 44</strong></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Log note</h2><p class="panel-sub">Remember</p></div></div><p class="page-subtitle">Write down every work set. Missed sessions are skipped, not doubled. If you miss a week or more, repeat the last completed week 5–10% lighter.</p></section></div>`;
+      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status ${dayStat.toLowerCase()}">${esc(dayStat)}</span></div></div><div class="day-tabs">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><label class="training-summary" for="session-date">Session date</label><input id="session-date" class="input" type="date" style="width:auto;min-width:135px" value="${esc(suggestedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}">${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">Entries autosave locally as you type; device sync waits until you pause. Exercise status updates from your reps. ${canCopy?'Copy previous numbers to prefill, then adjust to match today’s performance.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
+      <div class="two-col"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Week summary</h2><p class="panel-sub">Enter reps for each planned set and statuses update automatically; tap Skip only when you miss a movement.</p></div></div><div class="goal-strip"><div class="goal-item"><span>Completed</span><strong>${stat.done} / ${stat.total} sessions</strong></div><div class="goal-item"><span>Partial</span><strong>${stat.partial} sessions</strong></div><div class="goal-item"><span>Logged work sets</span><strong>${stat.sets}</strong></div><div class="goal-item"><span>Cycle week</span><strong>${String(w).padStart(2,'0')} / 44</strong></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Log note</h2><p class="panel-sub">Remember</p></div></div><p class="page-subtitle">Write down every work set. Missed sessions are skipped, not doubled. If you miss a week or more, repeat the last completed week 5–10% lighter.</p></section></div>`;
   }
   function renderCheckins() {
     const w=selectedWeek(), v=state.checkins[w]||{}, phase=v.phase||state.settings.phase||'Bulk';
@@ -468,10 +482,13 @@
     if(!syncInfo.loggedIn) return;
     if(syncInfo.busy) { syncInfo.pending=true; return; }
     clearTimeout(syncInfo.timer);
-    syncInfo.timer=setTimeout(()=>syncNow(false),700);
+    syncInfo.timer=setTimeout(()=>syncNow(false),1800);
   }
+  function isWorkoutInputFocused() { return !!document.activeElement?.matches('[data-set][data-field]'); }
   async function syncNow(announce=false) {
     if(!syncInfo.loggedIn||syncInfo.busy) return;
+    if(isWorkoutInputFocused()) { syncInfo.pending=true; return; }
+    const revisionAtStart=localEditRevision;
     syncInfo.busy=true; syncInfo.pending=false; setSavedStatus('Syncing…',true);
     let succeeded=false;
     try {
@@ -497,6 +514,12 @@
         const saved=await put.json(); remote={...remote,revision:saved.revision,updatedAt:saved.updatedAt};
       }
       const localChanged=!sameJSON(syncData(state),merged);
+      if(localEditRevision!==revisionAtStart||isWorkoutInputFocused()) {
+        syncInfo.pending=true;
+        setSavedStatus('Saved locally · sync waiting for pause');
+        if(announce) showToast('Your local entries are safe. Sync will resume when you finish editing.');
+        return;
+      }
       if(localChanged) { applySyncData(merged); render(); }
       localStorage.setItem(syncBaseStorageKey(),JSON.stringify({state:merged,revision:remote.revision||0}));
       setSavedStatus('Synced across devices'); succeeded=true;
@@ -506,7 +529,7 @@
       if(announce) showToast('Sync could not complete. Your local changes are still saved.');
     } finally {
       syncInfo.busy=false;
-      if(syncInfo.pending) { syncInfo.pending=false; queueSync(); }
+      if(syncInfo.pending&&!isWorkoutInputFocused()) { syncInfo.pending=false; queueSync(); }
       if(succeeded) refreshPrivacyStatus();
     }
   }
@@ -585,16 +608,10 @@
     if(action==='export') return downloadBackup();
     if(action==='import') return document.querySelector('#backup-file')?.click();
     if(action==='toggle-exercise') { state.ui.openExercise=state.ui.openExercise===target.dataset.id?null:target.dataset.id; return render(); }
-    if(action==='save-exercise') {
-      const id=target.dataset.id,card=target.closest('.exercise-card');
-      const status=card.querySelector(`[data-status="${CSS.escape(id)}"]`)?.value||'Planned';
-      const count=maxSets(weekRows(selectedWeek()).find(r=>r.id===id)?.[deload(selectedWeek())?'deloadSets':phaseForWeek(selectedWeek())==='Cut'?'cutSets':'sets']);
-      const sets=Array.from({length:count},(_,i)=>({
-        load:card.querySelector(`[data-set="${i}"][data-field="load"]`)?.value||'',
-        reps:card.querySelector(`[data-set="${i}"][data-field="reps"]`)?.value||'',
-        rir:card.querySelector(`[data-set="${i}"][data-field="rir"]`)?.value||''
-      }));
-      state.logs[id]={...(state.logs[id]||{}),status,sets};persist();render();showToast('Exercise log saved.');return;
+    if(action==='toggle-skip') {
+      const id=target.dataset.id,entry=state.logs[id]||{status:'Planned',sets:[]};
+      if(loggedSetCount(entry)) return;
+      state.logs[id]={...entry,status:statusOf(id)==='Skipped'?'Planned':'Skipped'};persist();render();return;
     }
     if(action==='current-week') {state.ui.week=currentWeek();state.ui.day='all';persist();render();return;}
     if(action==='toggle-quick-log') {state.ui.quickLog=state.ui.quickLog===false;state.ui.openExercise=null;persist();render();return;}
@@ -628,17 +645,23 @@
     if(!id||!['load','reps','rir'].includes(field))return;
     const entry=state.logs[id]||{status:'Planned',sets:[]};
     const sets=[...(entry.sets||[])];sets[index]={...(sets[index]||{}),[field]:el.value};
-    const status=entry.status==='Planned'&&loggedSetCount({sets})?'Partial':entry.status;
+    const updated={...entry,sets};
+    const row=program.exercises.find(exercise=>exercise.id===id);
+    const status=loggedSetCount(updated)?(row?automaticExerciseStatus(row,updated):'Partial'):'Planned';
     state.logs[id]={...entry,status,sets};
     const pill=card.querySelector('.status-pill');if(pill){pill.textContent=status;pill.className=`status-pill ${status}`;}
-    const select=card.querySelector('[data-status]');if(select)select.value=status;
+    const skip=card.querySelector('[data-action="toggle-skip"]');
+    if(skip){skip.hidden=!!loggedSetCount(updated)||!['Planned','Skipped'].includes(status);skip.textContent=status==='Skipped'?'Undo skip':'Skip';}
     persist();
+  });
+  document.addEventListener('focusout', e=>{
+    if(!e.target.matches('[data-set][data-field]'))return;
+    setTimeout(()=>{if(!isWorkoutInputFocused()&&syncInfo.pending){syncInfo.pending=false;queueSync();}},0);
   });
   document.addEventListener('change', e=>{
     const el=e.target;
     if(el.id==='week-select'){state.ui.week=Number(el.value);state.ui.day='all';persist();render();return;}
     if(el.id==='strength-exercise'){state.ui.strengthExercise=el.value;persist();render();return;}
-    if(el.dataset.status){state.logs[el.dataset.status]={...(state.logs[el.dataset.status]||{}),status:el.value};persist();render();return;}
     if(el.dataset.change==='session-date'){state.sessionDates[`${el.dataset.week}|${el.dataset.day}`]=el.value;persist();showToast('Session date saved.');return;}
     if(el.id==='backup-file'&&el.files?.[0]){importBackup(el.files[0]);el.value='';}
   });
