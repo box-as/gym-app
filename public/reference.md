@@ -12,11 +12,13 @@ This combines Program 1's progression system, RIR targets, and nutrition framewo
 
 **Choosing a starting weight:** in Week 1, pick a load where your first working set lands inside the rep range at the target RIR, and adjust over the first session or two. If you finish with reps to spare, go heavier next time.
 
+**Lifting straps:** use them on Friday's Barbell RDL and on Thursday's shrugs, so grip and forearm fatigue from Thursday never ends a hamstring set early. On Thursday's rows and pulldowns, use them whenever your grip gives out before your back does.
+
 **Effort (RIR = Reps In Reserve)**
 
 - Compound lifts: stop 1–2 reps short of failure
 - Isolation lifts: stop 0–1 reps short of failure
-- The *last set* of every isolation exercise: true failure, safe machines/cables only (except the two light frequency-only sets: Monday's rear-delt fly and Friday's lateral raise)
+- The *last set* of every isolation exercise: true failure, safe machines/cables only (except Monday's rear-delt fly and Friday's lateral raise, which stop at 1 RIR with no failure set — they're the 2nd/3rd weekly exposure for those muscles)
 
 **Warm-up** 5 min easy cardio, then on the first exercise of the day: 2–3 ramp-up sets (\~50%, 70%, 85% of working weight, for 5-3-1 reps). Every other exercise: one light set before working sets.
 
@@ -56,7 +58,7 @@ This combines Program 1's progression system, RIR targets, and nutrition framewo
 | Machine Shoulder Press *(or standing DB OHP if you prefer free weight)* | 2–3 × 8–12 | 2 min | 1 | Far superior stability vs. standing DB press — more shoulder stimulus, less systemic fatigue. |
 | Neutral-Grip Lat Pulldown | 3 × 8–10 | 90 sec | 1 | Pull elbows down toward hips, in line with the lat fibers. |
 | Cable/DB Lateral Raise | 3 × 12–15 (last set to failure) | 60 sec | 0–1 | Set pulley at hip/wrist height for constant tension; final set to failure. |
-| Reverse Pec Deck Fly *or* Cable Rear Delt Fly | 2 × 12–15 | 60 sec | 2–3 | Second weekly rear-delt exposure, kept light and quick. This is a stubborn muscle that responds better to 2×/week frequency than cramming all volume into Thursday — the 3-day gap to Thursday's Face Pull is plenty of recovery. Use roughly 60–70% of the weight you'd use on Thursday's main rear-delt set, and stop 2–3 reps short of failure — this set's job is frequency, not fatigue. Thursday's Face Pull stays the hard, failure-proximity set for this muscle. |
+| Reverse Pec Deck Fly *or* Cable Rear Delt Fly | 2 × 12–15 | 60 sec | 1 | Second weekly rear-delt exposure. This is a stubborn muscle that responds better to 2×/week frequency than cramming all volume into Thursday, and the 3-day gap to Thursday is plenty of recovery. Use your normal working weight — the load that makes 12–15 reps genuinely hard — and stop 1 rep short of failure on both sets (no failure set). A weight that lets you stop 10 reps short is a warm-up, not a growth stimulus. |
 | Incline DB Curl (45–60° bench) | 3 × 8–12 | 90 sec | 0–1 | Set bench to 45–60°; keeps the biceps long head under heavy stretch. |
 | Cable Overhead Rope Triceps Extension | 2–3 × 10–12 (last set to failure) | 60 sec | 0–1 | Deep elbow flexion behind the head to bias the triceps long head. |
 
@@ -95,7 +97,7 @@ This combines Program 1's progression system, RIR targets, and nutrition framewo
 | Straight-Arm Cable Pullover | 2–3 × 10–15 | 60 sec | 0 | Near-pure lat isolation with minimal bicep involvement. |
 | Cable Face Pull *or* Reverse Pec Deck Fly | 3–4 × 12–15 | 60 sec | 0 | Both hit rear delts/mid-traps equally well. Prefer the Face Pull when available — its external-rotation finish also works the rotator cuff, which is useful given how much pressing (internal rotation) this program has. Reverse Pec Deck Fly is a fully fine substitute if the cable/rope is tied up. |
 | DB Hammer Curl | 3 × 8–12 | 90 sec | 0–1 | Builds the brachialis/brachioradialis for arm thickness. |
-| DB/Barbell Shrug (2s peak hold) | 2–3 × 8–12 | 90 sec | 0–1 | Hold the top contraction for 2 seconds each rep. |
+| DB/Barbell Shrug (2s peak hold) | 2–3 × 8–12 | 90 sec | 0–1 | Hold the top contraction for 2 seconds each rep. Use straps so grip isn't the limiter. |
 | EZ-Bar Preacher Curl | 2–3 × 10–15 | 60–90 sec | 0 | Trains the biceps short head in a shortened position. |
 
 *Perform hammer curl and shrug as straight sets, not a forced superset — you'll get better quality reps on each.*
@@ -104,11 +106,11 @@ This combines Program 1's progression system, RIR targets, and nutrition framewo
 
 | Exercise | Sets × Reps | Rest | Target RIR | Notes |
 | --- | --- | --- | --- | --- |
-| Barbell Romanian Deadlift | 3 × 6–10 | 2.5–3 min | 1–2 | Push the hips back; stop the descent once the pelvis stops rotating and hamstring tension maxes out. |
+| Barbell Romanian Deadlift | 3 × 6–10 | 2.5–3 min | 1–2 | Push the hips back; stop the descent once the pelvis stops rotating and hamstring tension maxes out. Use lifting straps — Thursday's pulling leaves your grip tired, and grip shouldn't be what limits a hamstring set. |
 | Bulgarian Split Squat *(or Walking Lunge / Hack Squat if knees complain)* | 3 × 8–12/leg | 90 sec–2 min | 1 | A slight forward torso lean loads the glutes and upper hamstrings under stretch. |
 | Lying Leg Curl | 3–4 × 10–15 (last set to failure) | 90 sec | 0–1 | Complements Tuesday's seated curls by hitting the hamstrings from a neutral hip angle. |
-| Seated Calf Raise (2s stretch pause) | 5 × 10–15 | 60 sec | 0 | Isolates the soleus; 2-second hold at the bottom. Bumped to 5 sets to match Tuesday's increase. |
-| Cable Lateral Raise (light, strict) | 3 × 15–20 | 60 sec | 1–2 | Third weekly side-delt exposure (Mon/Wed/Fri) — its job is frequency, not fatigue: light weight, strict reps, stop 1–2 reps short of failure. Run it for the first 4 weeks — if your shoulders feel fine, keep it; if they ache or recovery is poor, drop it (side delts fall back to 7 sets/week, which still works). Drop this first if side-delt numbers stall too. |
+| Leg Press Calf Raise (2s stretch pause) | 5 × 10–15 | 60 sec | 0 | Knees nearly locked (not hyper-extended), full stretch at the bottom, 2-second pause. Straight-leg calf work grows the gastrocnemius far more than seated raises while the soleus grows about the same (Kinoshita et al., 2023), so both calf days are now straight-leg. A Smith or standing calf raise works too if the leg press is busy. |
+| Cable Lateral Raise (strict reps) | 3 × 15–20 | 60 sec | 1 | Third weekly side-delt exposure (Mon/Wed/Fri). Use your normal working weight for 15–20 strict reps and stop 1 rep short of failure on every set — no failure set. Friday is followed by two rest days, so recovery isn't a concern. Run it for the first 4 weeks — if your shoulders feel fine, keep it; if they ache or recovery is poor, drop it (side delts fall back to 7 sets/week, which still works). Drop this first if side-delt numbers stall too. |
 | Hanging Leg Raise | 3 × 10–15 | 60 sec | 0–1 | Strict control — avoid swinging or using momentum. |
 
 **Saturday / Sunday: full rest.** 7,000–10,000 daily walking steps still recommended for blood flow and nutrient delivery.
@@ -117,13 +119,13 @@ This combines Program 1's progression system, RIR targets, and nutrition framewo
 
 ## WEEK 11 — Deload
 
-Same exercises. Cut sets roughly in half (3→2, 4–5→2–3). Reduce load 10–20%. Stay at 3–4+ RIR — no failure, no PR attempts, no intensity techniques. Keep protein and sleep exactly as normal. Don't skip this — it resensitizes muscle receptors and clears systemic fatigue before Block 2.
+Same exercises. Cut sets roughly in half (3→2, 4–5→2–3). Reduce load 10–20%. Stay at 3–4+ RIR — no failure, no PR attempts, no intensity techniques. Keep protein and sleep exactly as normal. Don't skip this — it resensitizes muscle receptors and clears systemic fatigue before Block 2. When the deload ends, resume unchanged exercises at 100% of your last pre-deload working weight — no extra reset needed.
 
 ---
 
 ## BLOCK 2 — Weeks 12–21 (Deep Stretch & Peak Contraction)
 
-Same structure and rules as Block 1, with these swaps only. Keep the primary strength compounds (RDL, Smith Squat, Bench Press, Incline DB Press) unchanged to preserve your progression tracking — only accessories rotate, to introduce novel fiber recruitment. Start \~5–10% below your Block 1 finishing weights and rebuild via double progression.
+Same structure and rules as Block 1, with these swaps only. Keep the primary strength compounds (RDL, Smith Squat, Bench Press, Incline DB Press) unchanged to preserve your progression tracking — only accessories rotate, to introduce novel fiber recruitment. After the Week 11 deload, resume every *unchanged* exercise at 100% of your Week 10 working weight — the deload already cleared the fatigue, so a further cut just wastes weeks climbing back. If the first session feels harder than the target RIR, drop 2.5–5% for that session only. Only the *newly swapped* exercises start conservatively (10–15% lighter than you'd guess), then rebuild via double progression.
 
 | Day | Block 1 exercise | Block 2 replacement | Reason for swap |
 | --- | --- | --- | --- |
@@ -133,7 +135,7 @@ Same structure and rules as Block 1, with these swaps only. Keep the primary str
 | Thu | EZ-Bar Preacher Curl | EZ-Bar Spider Curl (2–3×10–15) | Maximizes peak-contraction tension. |
 | Thu | Medium/Wide-Grip Lat Pulldown | *Optional:* Wide-Grip Lat Pulldown (3×8–10) | Shifts bias slightly toward upper back/teres — but the medium grip was chosen for better natural ROM and less shoulder strain. Try it for 2–3 sessions and revert if your shoulders don't like it. |
 
-Everything else — sets, reps, rest, RIR targets — stays identical to Block 1. That includes Monday's light rear-delt set and Friday's light lateral raise (RIR 1–2), which carry into Block 2 unchanged.
+Everything else — sets, reps, rest, RIR targets — stays identical to Block 1. That includes Monday's rear-delt set and Friday's lateral raise (both RIR 1), which carry into Block 2 unchanged.
 
 *Note: leave the Flat Barbell Bench Press as-is in Block 2 — swapping it for a DB press variant would break your weight-progression tracking on the program's main pressing lift. The incline DB press and chest fly already cover the "deep stretch" angle without touching the primary strength anchor.*
 
@@ -141,7 +143,7 @@ Everything else — sets, reps, rest, RIR targets — stays identical to Block 1
 
 ## WEEK 22 — Deload
 
-Same rules as Week 11. Then continue to Block 3 (Week 23) — see Long-Term Periodization below.
+Same rules as Week 11. Then continue to Block 3 (Week 23) — see Long-Term Periodization below. Unchanged exercises resume at 100% of your Week 21 weights; newly swapped exercises start 10–15% lighter.
 
 ## Long-Term Periodization (the 4-block rotation)
 
@@ -177,7 +179,7 @@ The program is a loop of **four 10-week blocks**, each followed by a deload week
 | Tue | Leg Press | Same | Hack Squat (machine) | Same |
 | Tue | Seated Leg Curl | Same | Single-Leg Seated Leg Curl | Same |
 | Tue | Leg Extension | Same | Single-Leg Extension | Same |
-| Tue | Standing Calf Raise | Same | Leg Press Calf Raise | Same |
+| Tue | Standing Calf Raise | Same | Smith Machine Calf Raise (or Donkey Calf Raise) | Same |
 | Tue | Cable Crunch | Same | Ab Crunch Machine | Same |
 | Wed | Incline Machine / Smith Press | Same | Converging Machine Chest Press | Same |
 | Wed | Cable Standing Chest Fly | Same | Pec Deck Fly | Same |
@@ -193,14 +195,14 @@ The program is a loop of **four 10-week blocks**, each followed by a deload week
 | Thu | EZ-Bar Preacher Curl | EZ-Bar Spider Curl (2–3×10–15) | Machine or Cable Preacher Curl | Single-Arm DB Preacher Curl |
 | Fri | Bulgarian Split Squat | Same | DB Reverse Lunge | Same |
 | Fri | Lying Leg Curl | Same | Cable Standing Leg Curl | Same |
-| Fri | Seated Calf Raise | Same | Single-Leg Seated Calf Raise | Same |
-| Fri | Cable Lateral Raise (light, strict) | Same | Seated DB Lateral Raise | Same |
+| Fri | Leg Press Calf Raise | Same | Single-Leg Standing Calf Raise (hold a rack) | Same |
+| Fri | Cable Lateral Raise (strict reps) | Same | Seated DB Lateral Raise | Same |
 | Fri | Hanging Leg Raise | Same | Captain's Chair Leg Raise | Same |
 
 ### Rules
 
 - Switch blocks only right after a deload week. Never mid-block, unless something hurts or the equipment is unavailable (then use the nearest option from the same row).
-- Treat each new exercise as new: start 10–15% lighter, log it separately, and let double progression rebuild the numbers over 2–3 weeks.
+- Treat each new exercise as new: start 10–15% lighter, log it separately, and let double progression rebuild the numbers over 2–3 weeks. Exercises that don't change between blocks resume at 100% of their pre-deload weight.
 - If you start a cut, finish it using the exercises of the block you're in (with the Cutting tables), then resume that block. Don't switch blocks mid-cut.
 - Take an extra off-schedule deload whenever joints, sleep, or motivation demand it.
 
@@ -243,7 +245,7 @@ Keep the exact exercises, order, and rep ranges from whichever block you're in. 
 | Machine Shoulder Press | 2–3 × 8–12 | 2 × 8–12 |
 | Neutral-Grip Lat Pulldown | 3 × 8–10 | 3 × 8–10 *(unchanged)* |
 | Cable Lateral Raise | 3 × 12–15 | 2 × 12–15 |
-| Reverse Pec Deck Fly / Cable Rear Delt Fly | 2 × 12–15 | 2 × 12–15 *(unchanged — this is already a light set)* |
+| Reverse Pec Deck Fly / Cable Rear Delt Fly | 2 × 12–15 | 2 × 12–15 *(unchanged; RIR 1–2 while cutting)* |
 | Incline DB Curl | 3 × 8–12 | 2 × 8–12 |
 | Cable Overhead Triceps Extension | 2–3 × 10–12 | 2 × 10–12 |
 
@@ -288,8 +290,8 @@ Keep the exact exercises, order, and rep ranges from whichever block you're in. 
 | Barbell Romanian Deadlift | 3 × 6–10 | 3 × 6–10 *(unchanged)* |
 | Bulgarian Split Squat | 3 × 8–12/leg | 2 × 8–12/leg |
 | Lying Leg Curl | 3–4 × 10–15 | 3 × 10–15 |
-| Seated Calf Raise | 5 × 10–15 | 4 × 10–15 |
-| Cable Lateral Raise | 3 × 15–20 | 2 × 15–20 *(light, RIR 1–2 — first to drop if recovery suffers)* |
+| Leg Press Calf Raise | 5 × 10–15 | 4 × 10–15 |
+| Cable Lateral Raise | 3 × 15–20 | 2 × 15–20 *(RIR 1–2 — first to drop if recovery suffers)* |
 | Hanging Leg Raise | 3 × 10–15 | 2 × 10–15 |
 
 ### If fatigue piles up further: collapse to 4 days

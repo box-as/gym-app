@@ -300,10 +300,27 @@
     const rx=getPrescription(row,w), count=maxSets(rx.sets);
     const isOpen=state.ui.quickLog!==false||state.ui.openExercise===row.id;
     const skipButton=(status==='Planned'||status==='Skipped')&&!loggedSetCount(entry)?`<button type="button" class="skip-exercise" data-action="toggle-skip" data-id="${esc(row.id)}">${status==='Skipped'?'Undo skip':'Skip'}</button>`:'';
+<<<<<<< HEAD
     const sets=Array.from({length:count},(_,i)=>entry.sets?.[i]||{});
     const setRows=sets.map((s,i)=>`<div class="set-label">Set ${i+1}</div><input class="input" type="number" inputmode="decimal" step="any" min="0" placeholder="${esc(state.settings.loadUnit)}" aria-label="Set ${i+1} load" data-set="${i}" data-field="load" value="${esc(s.load??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" placeholder="reps" aria-label="Set ${i+1} reps" data-set="${i}" data-field="reps" value="${esc(s.reps??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" max="10" placeholder="RIR" aria-label="Set ${i+1} reps in reserve" data-set="${i}" data-field="rir" value="${esc(s.rir??'')}">`).join('');
     const toggle=state.ui.quickLog===false?`<button class="expand-button" data-action="toggle-exercise" data-id="${esc(row.id)}" aria-label="${isOpen?'Hide':'Show'} set log">${isOpen?'−':'+'}</button>`:'';
     return `<article class="exercise-card" data-card="${esc(row.id)}"><div class="exercise-main"><div class="exercise-index">${String(index+1).padStart(2,'0')}</div><div class="exercise-content"><div class="exercise-title-row"><span class="exercise-title">${esc(row.exercise)}</span><span class="status-pill ${esc(status)}">${esc(status)}</span></div><div class="exercise-meta"><span>${esc(rx.sets)} sets · ${esc(rx.reps)} reps</span><span>${esc(rx.rir)} RIR</span><span>Rest ${esc(row.rest||'—')}</span><span>${esc(muscleOf(row.exercise))}</span></div><p class="exercise-cue">${esc(row.cue||'Log load, reps, and RIR for each working set.')}</p></div><div class="exercise-controls">${skipButton}${toggle}</div></div>${isOpen?`<div class="exercise-details"><div class="set-grid"><div></div><div class="set-grid-head">Load (${esc(state.settings.loadUnit)})</div><div class="set-grid-head">Reps</div><div class="set-grid-head">RIR <span>(optional)</span></div>${setRows}</div><div class="exercise-foot"><small>Autosaves as you type. Enter reps for each set to mark this exercise done; RIR is optional.</small><small>Progression: reach the top of the rep range on all sets before adding load.</small></div></div>`:''}</article>`;
+=======
+    const visibleSetCount=Math.max(count,entry.sets?.length||0);
+    const sets=Array.from({length:visibleSetCount},(_,i)=>entry.sets?.[i]||{});
+    const setRows=sets.map((s,i)=>{const label=i<count?`Set ${i+1}`:`Extra set ${i+1}`;return `<div class="set-label">${label}</div><input class="input" type="number" inputmode="decimal" step="any" min="0" placeholder="${esc(state.settings.loadUnit)}" aria-label="${label} load" data-set="${i}" data-field="load" value="${esc(s.load??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" placeholder="reps" aria-label="${label} reps" data-set="${i}" data-field="reps" value="${esc(s.reps??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" max="10" placeholder="RIR" aria-label="${label} reps in reserve" data-set="${i}" data-field="rir" value="${esc(s.rir??'')}">`;}).join('');
+    const previous=previousLoggedRow(row,w);
+    const previousSets=previous?(state.logs[previous.id]?.sets||[]).filter(s=>s&&((s.load!==''&&s.load!=null)||(s.reps!==''&&s.reps!=null))):[];
+    const previousSummary=previousSets.map((s,i)=>{
+      const load=s.load!==''&&s.load!=null?`${esc(s.load)} ${esc(state.settings.loadUnit)}`:'';
+      const reps=s.reps!==''&&s.reps!=null?`${esc(s.reps)} reps`:'';
+      const rir=s.rir!==''&&s.rir!=null?`${esc(s.rir)} RIR`:'';
+      return `Set ${i+1}: ${[load,reps].filter(Boolean).join(' × ')}${rir?` · ${rir}`:''}`;
+    }).join(' · ');
+    const previousReference=previous&&previousSummary?`<div class="previous-reference"><div><strong>Last logged · ${esc(weekLabel(previous.week))}</strong><span>${previousSummary}</span></div>${!loggedSetCount(entry)?`<button type="button" class="button button-outline button-small" data-action="copy-last-exercise" data-id="${esc(row.id)}">Use these numbers</button>`:''}</div>`:'';
+    const toggle=state.ui.quickLog===false?`<button class="expand-button" data-action="toggle-exercise" data-id="${esc(row.id)}" aria-label="${isOpen?'Hide':'Show'} set log">${isOpen?'−':'+'}</button>`:'';
+    return `<article class="exercise-card" data-card="${esc(row.id)}"><div class="exercise-main"><div class="exercise-index">${String(index+1).padStart(2,'0')}</div><div class="exercise-content"><div class="exercise-title-row"><span class="exercise-title">${esc(row.exercise)}</span><span class="status-pill ${esc(status)}">${esc(status)}</span></div><div class="exercise-meta"><span>${esc(rx.sets)} planned sets · ${esc(rx.reps)} reps</span><span>${esc(rx.rir)} RIR</span><span>Rest ${esc(row.rest||'—')}</span><span>${esc(muscleOf(row.exercise))}</span></div><p class="exercise-cue">${esc(row.cue||'Log load, reps, and RIR for each working set.')}</p></div><div class="exercise-controls">${skipButton}${toggle}</div></div>${isOpen?`<div class="exercise-details"><div class="set-grid"><div></div><div class="set-grid-head">Load (${esc(state.settings.loadUnit)})</div><div class="set-grid-head">Reps</div><div class="set-grid-head">RIR <span>(optional)</span></div>${setRows}</div>${previousReference}<button type="button" class="button button-outline button-small add-set-button" data-action="add-set" data-id="${esc(row.id)}">Add additional set</button><div class="exercise-foot"><small>Autosaves as you type. Enter reps for each planned set to mark this exercise done; extra sets are counted too, and RIR is optional.</small><small>Progression: reach the top of the rep range on all planned sets before adding load.</small></div></div>`:''}</article>`;
+>>>>>>> 0635322 (New markdown update, additional set and preceding week log view)
   }
   function renderTraining() {
     const w=selectedWeek(), rows=weekRows(w), days=uniqueDays(w);
@@ -369,8 +386,9 @@
   function renderProgram() {
     const ref=program.reference.map(r=>`<article class="guide-card"><h3>${esc(r.topic)}</h3><p>${esc(r.text)}</p></article>`).join('');
     const targets=Object.entries(program.volumeTargets).map(([m,v])=>`<div class="goal-item"><span>${esc(m)}</span><strong>${esc(v)} sets / week</strong></div>`).join('');
-    app.innerHTML=`${pageHead('PROGRAM REFERENCE','The 44-week plan','All block swaps, training rules, nutrition targets, and milestone checkpoints in one place.',`<button class="button button-primary" data-page="training">Open training log ↗</button>`)}
-      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Four-block rotation</h2><p class="panel-sub">Ten weeks of training followed by a deload; repeat the loop after Week 44.</p></div></div><div class="block-roadmap"><div class="block-card"><strong>Block 1</strong><span>Weeks 1–10</span><small>Foundational exercise selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 11</span><small>Half sets · 10–20% lighter</small></div><div class="block-card"><strong>Block 2</strong><span>Weeks 12–21</span><small>Stretch and contraction swaps</small></div><div class="block-card"><strong>Deload</strong><span>Week 22</span><small>Reset before Block 3</small></div><div class="block-card"><strong>Block 3</strong><span>Weeks 23–32</span><small>Fresh accessory selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 33</span><small>Reset before Block 4</small></div><div class="block-card"><strong>Block 4</strong><span>Weeks 34–43</span><small>Accessory swaps; main lifts stay</small></div><div class="block-card"><strong>Deload</strong><span>Week 44</span><small>Then repeat from Week 1</small></div></div></section>
+    const right=`<div class="page-controls"><a class="button button-outline button-small" href="/reference.html">Full program Markdown ↗</a><button class="button button-primary button-small" data-page="training">Open training log ↗</button></div>`;
+    app.innerHTML=`${pageHead('PROGRAM REFERENCE','The 44-week plan','All block swaps, training rules, nutrition targets, and milestone checkpoints, with the current full Markdown reference.',right)}
+      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Four-block rotation</h2><p class="panel-sub">Ten weeks of training followed by a deload; repeat the loop after Week 44.</p></div></div><div class="block-roadmap"><div class="block-card"><strong>Block 1</strong><span>Weeks 1–10</span><small>Foundational exercise selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 11</span><small>Half sets · 10–20% lighter, then retained loads resume</small></div><div class="block-card"><strong>Block 2</strong><span>Weeks 12–21</span><small>Stretch and contraction swaps</small></div><div class="block-card"><strong>Deload</strong><span>Week 22</span><small>Unchanged lifts resume at prior loads</small></div><div class="block-card"><strong>Block 3</strong><span>Weeks 23–32</span><small>Fresh accessory selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 33</span><small>Unchanged lifts resume at prior loads</small></div><div class="block-card"><strong>Block 4</strong><span>Weeks 34–43</span><small>Accessory swaps; main lifts stay</small></div><div class="block-card"><strong>Deload</strong><span>Week 44</span><small>Then repeat from Week 1</small></div></div></section>
       <section class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Weekly training split</h2><p class="panel-sub">Five sessions · two full rest days · about 60–75 minutes per session</p></div></div><div class="split-grid">${program.trainingDays.map(day=>`<div class="split-day"><strong>${esc(day.split('—')[0].trim())}</strong><span>${esc(day.split('—').slice(1).join('—').trim())}</span></div>`).join('')}</div></section>
       <section class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Block 1 weekly hard-set targets</h2><p class="panel-sub">Reference ranges from the program brief; later blocks carry the same general structure.</p></div></div><div class="goal-strip">${targets}</div></section>
       <section class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Rules & practical guidance</h2><p class="panel-sub">The program’s operating notes from the workbook reference tab.</p></div></div><div class="guide-grid">${ref}</div></section>
@@ -608,6 +626,36 @@
     if(action==='export') return downloadBackup();
     if(action==='import') return document.querySelector('#backup-file')?.click();
     if(action==='toggle-exercise') { state.ui.openExercise=state.ui.openExercise===target.dataset.id?null:target.dataset.id; return render(); }
+<<<<<<< HEAD
+=======
+    if(action==='add-set') {
+      const id=target.dataset.id,row=program.exercises.find(exercise=>exercise.id===id);
+      if(!row)return;
+      const entry=state.logs[id]||{status:'Planned',sets:[]},planned=maxSets(getPrescription(row,row.week).sets);
+      const nextIndex=Math.max(planned,entry.sets?.length||0);
+      if(nextIndex>=20){showToast('An exercise can have up to 20 logged sets.');return;}
+      const sets=Array.from({length:nextIndex},(_,i)=>entry.sets?.[i]||{});sets.push({load:'',reps:'',rir:''});
+      const updated={...entry,sets};
+      state.logs[id]={...updated,status:loggedSetCount(updated)?automaticExerciseStatus(row,updated):entry.status||'Planned'};
+      persist();render();
+      const card=[...document.querySelectorAll('.exercise-card')].find(item=>item.dataset.card===id);
+      card?.querySelector(`[data-set="${nextIndex}"][data-field="load"]`)?.focus();
+      return;
+    }
+    if(action==='copy-last-exercise') {
+      const id=target.dataset.id,row=program.exercises.find(exercise=>exercise.id===id),previous=row&&previousLoggedRow(row,row.week);
+      if(!row||!previous){showToast('No prior set numbers were found for this exercise.');return;}
+      const current=state.logs[id]||{status:'Planned',sets:[]};
+      if(loggedSetCount(current)){showToast('This exercise already has logged sets; review them before replacing anything.');return;}
+      const source=state.logs[previous.id]?.sets||[],count=maxSets(getPrescription(row,row.week).sets);
+      const hasValues=set=>!!set&&[set.load,set.reps,set.rir].some(value=>value!==''&&value!=null);
+      const lastSource=[...source].reverse().find(hasValues)||{};
+      const sets=Array.from({length:count},(_,i)=>({...((hasValues(source[i])?source[i]:lastSource))}));
+      const updated={...current,sets};
+      state.logs[id]={...updated,status:automaticExerciseStatus(row,updated)};
+      persist();render();showToast(`Prefilled from ${weekLabel(previous.week)}. Adjust today’s loads and reps as needed.`);return;
+    }
+>>>>>>> 0635322 (New markdown update, additional set and preceding week log view)
     if(action==='toggle-skip') {
       const id=target.dataset.id,entry=state.logs[id]||{status:'Planned',sets:[]};
       if(loggedSetCount(entry)) return;
@@ -622,7 +670,9 @@
         const previous=previousLoggedRow(row,w);if(!previous)return;
         const source=state.logs[previous.id]?.sets||[];if(!source.length)return;
         const rx=getPrescription(row,w),count=maxSets(rx.sets);
-        const sets=Array.from({length:count},(_,i)=>({...((source[i]&&Object.keys(source[i]).length)?source[i]:source[source.length-1])}));
+        const hasValues=set=>!!set&&[set.load,set.reps,set.rir].some(value=>value!==''&&value!=null);
+        const lastSource=[...source].reverse().find(hasValues)||{};
+        const sets=Array.from({length:count},(_,i)=>({...((hasValues(source[i])?source[i]:lastSource))}));
         state.logs[row.id]={...current,sets};copied++;
       });
       persist();render();showToast(copied?`Copied numbers for ${copied} exercise${copied===1?'':'s'}. Review and adjust today’s sets.`:'No previous set numbers found.');return;
