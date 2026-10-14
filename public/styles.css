@@ -17,9 +17,6 @@
 
 .sync-panel{margin:16px 0;padding:16px;border:1px solid #dfe7df;border-radius:14px;background:#f4f7f2}.sync-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.sync-panel h3{margin:0 0 5px;font:700 15px var(--display);color:var(--ink)}.sync-panel p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}.sync-panel .sync-account{margin:12px 0;color:var(--ink)}.sync-panel .modal-actions{margin-top:12px}.sync-panel .checkin-grid{margin-top:12px}.sync-panel .field-help{line-height:1.4}@media(max-width:520px){.sync-panel{padding:13px}.sync-panel-head{display:block}.sync-panel-head .schedule-status{display:inline-block;margin-top:10px}}
 .skip-exercise{border:0;background:transparent;color:#738079;font-size:9px;font-weight:700;padding:6px 7px;border-radius:7px;white-space:nowrap}.skip-exercise:hover{background:#f1f4ef;color:#4f6955}.skip-exercise[hidden]{display:none}@media(max-width:560px){.exercise-controls{gap:4px}.skip-exercise{padding:5px 4px;font-size:8px}}
-<<<<<<< HEAD
-=======
 
 .previous-reference{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding:10px 12px;border:1px solid #e4ebe0;border-radius:10px;background:#f5f8f2}.previous-reference>div{display:grid;gap:3px;min-width:0}.previous-reference strong{font-size:9px;color:#435c49}.previous-reference span{font-size:9px;color:#77847a;overflow-wrap:anywhere}.previous-reference .button{flex:none}.add-set-button{margin-top:10px}.set-label{overflow-wrap:anywhere}
 @media(max-width:640px){.previous-reference{align-items:flex-start;flex-direction:column}.previous-reference .button{align-self:flex-start}.exercise-foot{align-items:flex-start;flex-direction:column}}
->>>>>>> 0635322 (New markdown update, additional set and preceding week log view)
