@@ -2,6 +2,8 @@
 
 RepState is a browser-based hypertrophy tracker with a 44-week plan, workout logs, check-ins, milestones, and progress analytics. It can run in local-only mode or as a self-hosted app with private cross-device sync.
 
+User-added extra sets are labeled separately from planned sets and can be removed; a short Undo option restores a removed set and its logged values.
+
 ## Self-hosted accounts and sync
 
 The sync-enabled app is a single Python service with a same-origin JSON API and a persistent SQLite database. Anyone can create an account using **only a username and password**; there are no email, profile, or other user-information fields. Each username has a separate private tracker dataset, which syncs across that user's browsers and devices after they sign in.

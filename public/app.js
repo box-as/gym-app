@@ -16,6 +16,8 @@
   const syncInfo = { loggedIn: false, username: '', lastUsername: '', legacy: false, authMode: 'login', busy: false, timer: null, pending: false };
   let toastTimer;
   let localEditRevision = 0;
+  let undoSetDeletion = null;
+  let undoSetTimer;
 
   function loadState(key=STORAGE_KEY) {
     try {
@@ -103,6 +105,7 @@
     return row ? automaticExerciseStatus(row, entry) : entry?.status || 'Planned';
   }
   function loggedSetCount(entry) { return (entry?.sets || []).filter(s => s && (s.reps !== '' && s.reps != null || s.load !== '' && s.load != null)).length; }
+  function copySetValues(set) { const copied={...(set||{})}; delete copied.extraSet; return copied; }
   function setCountForWeek(w) {
     return Object.entries(state.logs).filter(([id, v]) => id.startsWith(`${w}:`)).reduce((n, [,v]) => n + loggedSetCount(v), 0);
   }
@@ -297,12 +300,16 @@
   function renderExerciseCard(row, index, w) {
     const entry=state.logs[row.id]||{status:'Planned',sets:[]};
     const status=statusOf(row.id);
-    const rx=getPrescription(row,w), count=maxSets(rx.sets);
+    const rx=getPrescription(row,w), count=maxSets(rx.sets),maxProgrammedSets=Math.max(maxSets(row.sets),maxSets(row.cutSets),maxSets(row.deloadSets));
     const isOpen=state.ui.quickLog!==false||state.ui.openExercise===row.id;
     const skipButton=(status==='Planned'||status==='Skipped')&&!loggedSetCount(entry)?`<button type="button" class="skip-exercise" data-action="toggle-skip" data-id="${esc(row.id)}">${status==='Skipped'?'Undo skip':'Skip'}</button>`:'';
     const visibleSetCount=Math.max(count,entry.sets?.length||0);
     const sets=Array.from({length:visibleSetCount},(_,i)=>entry.sets?.[i]||{});
-    const setRows=sets.map((s,i)=>{const label=i<count?`Set ${i+1}`:`Extra set ${i+1}`;return `<div class="set-label">${label}</div><input class="input" type="number" inputmode="decimal" step="any" min="0" placeholder="${esc(state.settings.loadUnit)}" aria-label="${label} load" data-set="${i}" data-field="load" value="${esc(s.load??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" placeholder="reps" aria-label="${label} reps" data-set="${i}" data-field="reps" value="${esc(s.reps??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" max="10" placeholder="RIR" aria-label="${label} reps in reserve" data-set="${i}" data-field="rir" value="${esc(s.rir??'')}">`;}).join('');
+    const setRows=sets.map((s,i)=>{
+      const isExtra=i>=count&&(!!s.extraSet||i>=maxProgrammedSets),label=isExtra?`Extra set ${i+1}`:`Set ${i+1}`;
+      const removeButton=isExtra?`<button type="button" class="delete-set-button" data-action="delete-set" data-id="${esc(row.id)}" data-set-index="${i}" aria-label="Remove ${label}" title="Remove ${label}">×</button>`:'';
+      return `<div class="set-label ${isExtra?'extra-set-label':''}"><span>${label}</span>${removeButton}</div><input class="input" type="number" inputmode="decimal" step="any" min="0" placeholder="${esc(state.settings.loadUnit)}" aria-label="${label} load" data-set="${i}" data-field="load" value="${esc(s.load??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" placeholder="reps" aria-label="${label} reps" data-set="${i}" data-field="reps" value="${esc(s.reps??'')}"><input class="input" type="number" inputmode="numeric" step="1" min="0" max="10" placeholder="RIR" aria-label="${label} reps in reserve" data-set="${i}" data-field="rir" value="${esc(s.rir??'')}">`;
+    }).join('');
     const previous=previousLoggedRow(row,w);
     const previousSets=previous?(state.logs[previous.id]?.sets||[]).filter(s=>s&&((s.load!==''&&s.load!=null)||(s.reps!==''&&s.reps!=null))):[];
     const previousSummary=previousSets.map((s,i)=>{
@@ -399,10 +406,17 @@
     }
     updateShell();
   }
-  function showToast(message) {
+  function showToast(message, action='') {
     const el=document.querySelector('#toast');
     if(!el) return;
-    el.textContent=message; el.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
+    if(action!=='undo-delete-set'){clearTimeout(undoSetTimer);undoSetDeletion=null;}
+    el.innerHTML=`<span>${esc(message)}</span>${action==='undo-delete-set'?'<button type="button" class="toast-action" data-action="undo-delete-set">Undo</button>':''}`;
+    el.classList.add('show');clearTimeout(toastTimer);
+    if(action==='undo-delete-set'){
+      clearTimeout(undoSetTimer);const pendingUndo=undoSetDeletion;
+      undoSetTimer=setTimeout(()=>{if(undoSetDeletion===pendingUndo)undoSetDeletion=null;},6000);
+    }
+    toastTimer=setTimeout(()=>el.classList.remove('show'),action==='undo-delete-set'?6000:2400);
   }
   function openSettings() {
     modalRoot.innerHTML=`<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="modal-head"><div><h2 id="settings-title">Cycle settings</h2><p>Set up your schedule and preferred units.</p></div><button class="modal-close" data-action="close-modal" aria-label="Close">×</button></div><form id="settings-form" class="modal-form"><div class="field"><label for="setting-start">Program start date</label><input class="input" id="setting-start" name="startDate" type="date" value="${esc(state.settings.startDate)}"><span class="field-help">Use the first day of Week 1; the schedule follows Monday to Friday.</span></div><div class="checkin-grid"><div class="field"><label for="setting-load">Training load unit</label><select class="select" id="setting-load" name="loadUnit"><option ${state.settings.loadUnit==='kg'?'selected':''}>kg</option><option ${state.settings.loadUnit==='lb'?'selected':''}>lb</option></select></div><div class="field"><label for="setting-body">Bodyweight unit</label><select class="select" id="setting-body" name="bodyUnit"><option ${state.settings.bodyUnit==='kg'?'selected':''}>kg</option><option ${state.settings.bodyUnit==='lb'?'selected':''}>lb</option></select></div><div class="field wide"><label for="setting-phase">Current nutrition phase</label><select class="select" id="setting-phase" name="phase"><option ${state.settings.phase==='Bulk'?'selected':''}>Bulk</option><option ${state.settings.phase==='Cut'?'selected':''}>Cut</option><option ${state.settings.phase==='Maintenance'?'selected':''}>Maintenance</option></select><span class="field-help">Check-ins can record phase changes by week.</span></div></div><div class="notice-box">Your workout logs and check-ins are stored only in this browser’s local storage. They are not uploaded to the hosted app. Export a backup before moving to another browser or device.</div><div class="modal-actions"><button type="button" class="button button-quiet button-small" data-action="import">Import backup</button><button type="submit" class="button button-primary">Save settings</button></div><input id="backup-file" type="file" accept="application/json,.json" hidden></form></section></div>`;
@@ -623,15 +637,39 @@
       const id=target.dataset.id,row=program.exercises.find(exercise=>exercise.id===id);
       if(!row)return;
       const entry=state.logs[id]||{status:'Planned',sets:[]},planned=maxSets(getPrescription(row,row.week).sets);
-      const nextIndex=Math.max(planned,entry.sets?.length||0);
-      if(nextIndex>=20){showToast('An exercise can have up to 20 logged sets.');return;}
-      const sets=Array.from({length:nextIndex},(_,i)=>entry.sets?.[i]||{});sets.push({load:'',reps:'',rir:''});
+      const nextIndex=Math.max(planned,entry.sets?.length||0),reservedUndo=undoSetDeletion?.id===id?1:0;
+      if(nextIndex>=20-reservedUndo){showToast(reservedUndo?'Undo the removal or wait before adding at the 20-set limit.':'An exercise can have up to 20 logged sets.',reservedUndo?'undo-delete-set':'');return;}
+      const sets=Array.from({length:nextIndex},(_,i)=>entry.sets?.[i]||{});sets.push({load:'',reps:'',rir:'',extraSet:true});
       const updated={...entry,sets};
       state.logs[id]={...updated,status:loggedSetCount(updated)?automaticExerciseStatus(row,updated):entry.status||'Planned'};
       persist();render();
       const card=[...document.querySelectorAll('.exercise-card')].find(item=>item.dataset.card===id);
       card?.querySelector(`[data-set="${nextIndex}"][data-field="load"]`)?.focus();
       return;
+    }
+    if(action==='delete-set') {
+      const id=target.dataset.id,row=program.exercises.find(exercise=>exercise.id===id),index=Number(target.dataset.setIndex),entry=state.logs[id];
+      if(!row||!Number.isInteger(index)||!Array.isArray(entry?.sets))return;
+      const planned=maxSets(getPrescription(row,row.week).sets);
+      const maxProgrammedSets=Math.max(maxSets(row.sets),maxSets(row.cutSets),maxSets(row.deloadSets));
+      if(index<planned||index>=entry.sets.length||(!entry.sets[index]?.extraSet&&index<maxProgrammedSets))return;
+      const sets=[...entry.sets],[removed]=sets.splice(index,1);
+      undoSetDeletion={id,index,set:removed&&typeof removed==='object'?{...removed}:{}};
+      const updated={...entry,sets};
+      state.logs[id]={...updated,status:loggedSetCount(updated)?automaticExerciseStatus(row,updated):entry.status||'Planned'};
+      persist();render();showToast('Extra set removed.','undo-delete-set');return;
+    }
+    if(action==='undo-delete-set') {
+      const deleted=undoSetDeletion;
+      if(!deleted)return;
+      clearTimeout(undoSetTimer);undoSetDeletion=null;
+      const row=program.exercises.find(exercise=>exercise.id===deleted.id);
+      if(!row){showToast('This set can no longer be restored.');return;}
+      const entry=state.logs[deleted.id]||{status:'Planned',sets:[]},sets=[...(entry.sets||[])];
+      sets.splice(Math.max(0,Math.min(deleted.index,sets.length)),0,{...deleted.set});
+      const updated={...entry,sets};
+      state.logs[deleted.id]={...updated,status:loggedSetCount(updated)?automaticExerciseStatus(row,updated):entry.status||'Planned'};
+      persist();render();showToast('Extra set restored.');return;
     }
     if(action==='copy-last-exercise') {
       const id=target.dataset.id,row=program.exercises.find(exercise=>exercise.id===id),previous=row&&previousLoggedRow(row,row.week);
@@ -641,7 +679,7 @@
       const source=state.logs[previous.id]?.sets||[],count=maxSets(getPrescription(row,row.week).sets);
       const hasValues=set=>!!set&&[set.load,set.reps,set.rir].some(value=>value!==''&&value!=null);
       const lastSource=[...source].reverse().find(hasValues)||{};
-      const sets=Array.from({length:count},(_,i)=>({...((hasValues(source[i])?source[i]:lastSource))}));
+      const sets=Array.from({length:count},(_,i)=>copySetValues(hasValues(source[i])?source[i]:lastSource));
       const updated={...current,sets};
       state.logs[id]={...updated,status:automaticExerciseStatus(row,updated)};
       persist();render();showToast(`Prefilled from ${weekLabel(previous.week)}. Adjust today’s loads and reps as needed.`);return;
@@ -662,7 +700,7 @@
         const rx=getPrescription(row,w),count=maxSets(rx.sets);
         const hasValues=set=>!!set&&[set.load,set.reps,set.rir].some(value=>value!==''&&value!=null);
         const lastSource=[...source].reverse().find(hasValues)||{};
-        const sets=Array.from({length:count},(_,i)=>({...((hasValues(source[i])?source[i]:lastSource))}));
+        const sets=Array.from({length:count},(_,i)=>copySetValues(hasValues(source[i])?source[i]:lastSource));
         state.logs[row.id]={...current,sets};copied++;
       });
       persist();render();showToast(copied?`Copied numbers for ${copied} exercise${copied===1?'':'s'}. Review and adjust today’s sets.`:'No previous set numbers found.');return;
