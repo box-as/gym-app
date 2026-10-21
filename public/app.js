@@ -139,13 +139,26 @@
     if (n.includes('bench') || n.includes('chest') || n.includes('pec') || (n.includes('press') && !n.includes('shoulder'))) return 'Chest';
     return 'Shoulders';
   }
+  function setHasPositiveReps(set) { return Number(set?.reps) > 0; }
   function muscleSets(w) {
     const out = {};
     weekRows(w).forEach(row => {
-      const sets = state.logs[row.id]?.sets || [];
-      const count = loggedSetCount({ sets });
       const muscle = muscleOf(row.exercise);
-      out[muscle] = (out[muscle] || 0) + count;
+      out[muscle] = (out[muscle] || 0) + (state.logs[row.id]?.sets || []).filter(setHasPositiveReps).length;
+    });
+    return out;
+  }
+  function prescribedVolume(w) {
+    const out = {};
+    weekRows(w).forEach(row => {
+      const muscle = muscleOf(row.exercise), target = maxSets(getPrescription(row, w).sets);
+      const sets = state.logs[row.id]?.sets || [];
+      const completed = sets.slice(0, target).filter(setHasPositiveReps).length;
+      const extras = sets.slice(target).filter(setHasPositiveReps).length;
+      if (!out[muscle]) out[muscle] = { completed: 0, target: 0, extras: 0 };
+      out[muscle].completed += completed;
+      out[muscle].target += target;
+      out[muscle].extras += extras;
     });
     return out;
   }
@@ -244,11 +257,11 @@
     });
     return records.sort((a,b)=>a.week-b.week).slice(-12).map(x=>({label:`W${x.week}`,value:x.value}));
   }
+  function volumeCompletion(w) { return prescribedVolume(w); }
   function volumeBars(w) {
-    const logged=muscleSets(w);
-    const muscles=Object.keys(program.volumeTargets);
-    const max=Math.max(12,...muscles.map(m=>Number(String(program.volumeTargets[m]).match(/\d+/)?.[0]||0)));
-    return `<div class="bar-chart">${muscles.map(m=>{const val=logged[m]||0,goal=Number(String(program.volumeTargets[m]).match(/\d+/)?.[0]||0),pct=Math.min(100,val/max*100);return `<div class="bar-row"><span class="bar-label">${esc(m)}</span><div><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><span class="bar-target">Target ${esc(program.volumeTargets[m])} sets</span></div><span class="bar-value">${val} sets</span></div>`;}).join('')}</div>`;
+    const volume = volumeCompletion(w), muscles = Object.keys(volume);
+    if (!muscles.length) return chartEmpty('No prescribed muscle groups', 'This week has no exercise entries to measure.');
+    return `<div class="bar-chart">${muscles.map(m=>{const v=volume[m],pct=v.target?Math.min(100,v.completed/v.target*100):0;return `<div class="bar-row"><span class="bar-label">${esc(m)}</span><div><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><span class="bar-target">${v.completed} / ${v.target} prescribed sets · ${Math.round(pct)}%</span></div><span class="bar-value">${v.extras?`+${v.extras} extra · `:''}${v.completed+v.extras} logged</span></div>`;}).join('')}</div><p class="footnote">A set counts toward completion only when reps are positive. Extra logged sets are shown separately and never cover missing prescribed sets.</p>`;
   }
   function nextMilestone(w) {
     return program.milestones.find(m=>m.week>=w&&m.week<=44&&!state.milestones[`w${m.week}`])
@@ -269,7 +282,7 @@
       const status=groupedDayStatus(w,day), total=weekPlan.filter(r=>r.day===day).length;
       const className=status.toLowerCase();
       const badge=status==='Planned'?`${total} exercises`:status;
-      return `<div class="schedule-row"><div class="day-icon">${String(i+1).padStart(2,'0')}</div><div class="schedule-info"><strong>${esc(dayTitle(day))}</strong><span>${esc(day.split('—')[0].trim())} · ${total} planned movements</span></div><span class="schedule-status ${className}">${esc(badge)}</span></div>`;
+      return `<div class="schedule-row"><div class="day-icon">${String(i+1).padStart(2,'0')}</div><div class="schedule-info"><strong>${esc(dayTitle(day))}</strong><span>${esc(day.split('—')[0].trim())} · ${total} planned movements · ${esc(shortDate(sessionDate(w,day)))}</span></div><span class="schedule-status ${className}">${esc(badge)}</span></div>`;
     }).join('');
     app.innerHTML=`
       <section class="hero"><div class="hero-content"><div class="hero-chip"><b></b> THE CONSOLIDATED HYPERTROPHY PROGRAM</div><h1>Strong work.<br>Logged for the long game.</h1><p>${esc(startLine)}<br>Double progression, five training days, and 44 weeks of clear direction.</p><div class="hero-actions"><button class="button button-light" data-page="training">Start today’s workout <span aria-hidden="true">↗</span></button><button class="button button-quiet" data-action="settings">Cycle settings</button></div></div><div class="hero-side"><strong>${String(w).padStart(2,'0')}<span style="font-size:14px;color:#acb7ae"> / 44</span></strong><span>${esc(weekType)}</span></div></section>
@@ -282,7 +295,7 @@
       </div>
       <div class="two-col">
         <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Training consistency</h2><p class="panel-sub">Completed sessions by week · partial sessions count as half</p></div><button class="panel-action" data-page="analytics">Full analytics ↗</button></div><div class="chart-wrap">${completionChart(recent)}</div><div class="chart-legend"><span><i class="legend-dot"></i>Completed sessions</span><span><i class="legend-dot gray"></i>Deload week</span></div></section>
-        <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Muscle-group volume</h2><p class="panel-sub">Logged working sets this week against Block 1 reference targets</p></div></div>${volumeBars(w)}</section>
+        <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Muscle-group volume</h2><p class="panel-sub">Completed prescribed sets this week · targets follow this week’s phase and deload prescription</p></div></div>${volumeBars(w)}</section>
       </div>
       <div class="two-col">
         <section class="panel"><div class="panel-head"><div><h2 class="panel-title">This week at a glance</h2><p class="panel-sub">${weekPlan.length} planned exercise entries · ${deload(w)?'reduced sets, easy effort':'log every working set'}</p></div><button class="panel-action" data-page="training">Open log ↗</button></div><div class="schedule-list">${dayRows}</div></section>
@@ -335,8 +348,8 @@
     const suggestedDate=sessionDate(w,chosen)||(weekday>=1&&weekday<=5&&days.indexOf(chosen)===todayIndex?todayISO():'');
     const canCopy=list.some(row=>previousLoggedRow(row,w));
     app.innerHTML=`${pageHead('TRAINING LOG',`${weekLabel(w)} · ${activeBlock(w)}`,`${isDeload?'Scheduled deload week':phase+' phase'} · ${rows.length} exercise entries across five training days`,right)}
-      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status ${dayStat.toLowerCase()}">${esc(dayStat)}</span></div></div><div class="day-tabs">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><label class="training-summary" for="session-date">Session date</label><input id="session-date" class="input" type="date" style="width:auto;min-width:135px" value="${esc(suggestedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}">${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">Entries autosave locally as you type; device sync waits until you pause. Exercise status updates from your reps. ${canCopy?'Copy previous numbers to prefill, then adjust to match today’s performance.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
-      <div class="two-col"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Week summary</h2><p class="panel-sub">Enter reps for each planned set and statuses update automatically; tap Skip only when you miss a movement.</p></div></div><div class="goal-strip"><div class="goal-item"><span>Completed</span><strong>${stat.done} / ${stat.total} sessions</strong></div><div class="goal-item"><span>Partial</span><strong>${stat.partial} sessions</strong></div><div class="goal-item"><span>Logged work sets</span><strong>${stat.sets}</strong></div><div class="goal-item"><span>Cycle week</span><strong>${String(w).padStart(2,'0')} / 44</strong></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Log note</h2><p class="panel-sub">Remember</p></div></div><p class="page-subtitle">Write down every work set. Missed sessions are skipped, not doubled. If you miss a week or more, repeat the last completed week 5–10% lighter.</p></section></div>`;
+      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status ${dayStat.toLowerCase()}">${esc(dayStat)}</span></div></div><div class="day-tabs">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><label class="training-summary" for="session-date">Session date</label><input id="session-date" class="input" type="date" style="width:auto;min-width:135px" value="${esc(suggestedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}"><button type="button" class="button button-quiet button-small" data-action="session-date-today">Today</button><button type="button" class="button button-outline button-small" data-action="save-session-date">Save date</button>${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">Session date is when you actually train; tabs remain the original planned days. Move a missed session to the next day and adjust the remaining dates, including Saturday, without changing its program week or exercise logs. Entries autosave locally; device sync waits until you pause. Exercise status updates from your reps. ${canCopy?'Copy previous numbers to prefill, then adjust to match today’s performance.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
+      <div class="two-col"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Week summary</h2><p class="panel-sub">Enter reps for each planned set and statuses update automatically; tap Skip only when you miss a movement.</p></div></div><div class="goal-strip"><div class="goal-item"><span>Completed</span><strong>${stat.done} / ${stat.total} sessions</strong></div><div class="goal-item"><span>Partial</span><strong>${stat.partial} sessions</strong></div><div class="goal-item"><span>Logged work sets</span><strong>${stat.sets}</strong></div><div class="goal-item"><span>Cycle week</span><strong>${String(w).padStart(2,'0')} / 44</strong></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Log note</h2><p class="panel-sub">Remember</p></div></div><p class="page-subtitle">Write down every work set. A delayed session can be logged on a later date: select its original plan-day tab and change Session date. Adjust each remaining session separately; the plan does not shift automatically. If you miss a week or more, repeat the last completed week 5–10% lighter.</p></section></div>`;
   }
   function renderCheckins() {
     const w=selectedWeek(), v=state.checkins[w]||{}, phase=v.phase||state.settings.phase||'Bulk';
@@ -376,7 +389,7 @@
         <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Bodyweight trend</h2><p class="panel-sub">Weekly average · ${esc(state.settings.bodyUnit)}</p></div><span class="schedule-status">${points.length} data points</span></div>${svgLineChart(points,state.settings.bodyUnit)}</section>
         <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Training consistency</h2><p class="panel-sub">Completed sessions per week out of five</p></div></div>${completionChart(recent)}</section>
         <section class="panel span-two"><div class="panel-head"><div><h2 class="panel-title">Strength progression</h2><p class="panel-sub">Estimated 1RM from logged load × reps, using the Epley estimate</p></div><select id="strength-exercise" class="select compact" aria-label="Choose a lift">${exercises.map(e=>`<option ${e===state.ui.strengthExercise?'selected':''}>${esc(e)}</option>`).join('')}</select></div>${svgLineChart(strength,state.settings.loadUnit)}<p class="footnote">An estimate, not a tested max. Compare only the same lift, equipment, range of motion, and unit. Dumbbell loads reflect the value you enter.</p></section>
-        <section class="panel span-two"><div class="panel-head"><div><h2 class="panel-title">Latest logged muscle-group volume</h2><p class="panel-sub">Direct sets from entered work sets in ${weekLabel(selectedWeek())}; targets are the workbook’s Block 1 reference.</p></div></div>${volumeBars(selectedWeek())}</section>
+        <section class="panel span-two"><div class="panel-head"><div><h2 class="panel-title">Latest logged muscle-group volume</h2><p class="panel-sub">Completed prescribed sets in ${weekLabel(selectedWeek())}; targets use each exercise’s actual muscle and this week’s phase prescription.</p></div></div>${volumeBars(selectedWeek())}</section>
         <section class="panel span-two"><div class="panel-head"><div><h2 class="panel-title">Weekly check-in history</h2><p class="panel-sub">Weight trend, sleep and daily steps</p></div></div>${body}</section>
       </div>`;
   }
@@ -510,9 +523,11 @@
     syncInfo.timer=setTimeout(()=>syncNow(false),1800);
   }
   function isWorkoutInputFocused() { return !!document.activeElement?.matches('[data-set][data-field]'); }
+  function isDateInputFocused() { return document.activeElement?.matches('[data-change="session-date"]') || false; }
+  function isEditableInputFocused() { return isWorkoutInputFocused() || isDateInputFocused(); }
   async function syncNow(announce=false) {
     if(!syncInfo.loggedIn||syncInfo.busy) return;
-    if(isWorkoutInputFocused()) { syncInfo.pending=true; return; }
+    if(isEditableInputFocused()) { syncInfo.pending=true; return; }
     const revisionAtStart=localEditRevision;
     syncInfo.busy=true; syncInfo.pending=false; setSavedStatus('Syncing…',true);
     let succeeded=false;
@@ -539,7 +554,7 @@
         const saved=await put.json(); remote={...remote,revision:saved.revision,updatedAt:saved.updatedAt};
       }
       const localChanged=!sameJSON(syncData(state),merged);
-      if(localEditRevision!==revisionAtStart||isWorkoutInputFocused()) {
+      if(localEditRevision!==revisionAtStart||isEditableInputFocused()) {
         syncInfo.pending=true;
         setSavedStatus('Saved locally · sync waiting for pause');
         if(announce) showToast('Your local entries are safe. Sync will resume when you finish editing.');
@@ -554,7 +569,7 @@
       if(announce) showToast('Sync could not complete. Your local changes are still saved.');
     } finally {
       syncInfo.busy=false;
-      if(syncInfo.pending&&!isWorkoutInputFocused()) { syncInfo.pending=false; queueSync(); }
+      if(syncInfo.pending&&!isEditableInputFocused()) { syncInfo.pending=false; queueSync(); }
       if(succeeded) refreshPrivacyStatus();
     }
   }
@@ -622,6 +637,8 @@
   function clickAction(target, clickedTarget=target) {
     const action=target.dataset.action;
     if(!action) return;
+    if(action==='session-date-today') { const el=document.querySelector('#session-date'); if(el) { el.value=todayISO(); if(saveSessionDateInput(el)) showToast('Session date saved.'); } return; }
+    if(action==='save-session-date') { const el=document.querySelector('#session-date'); if(el && saveSessionDateInput(el)) showToast('Session date saved.'); return; }
     if(action==='settings') return openSettings();
     if(action==='sync-login') return loginSync();
     if(action==='sync-register') return registerSync();
@@ -733,14 +750,39 @@
     persist();
   });
   document.addEventListener('focusout', e=>{
-    if(!e.target.matches('[data-set][data-field]'))return;
-    setTimeout(()=>{if(!isWorkoutInputFocused()&&syncInfo.pending){syncInfo.pending=false;queueSync();}},0);
+    if(!e.target.matches('[data-set][data-field], [data-change="session-date"]'))return;
+    setTimeout(()=>{if(!isEditableInputFocused()&&syncInfo.pending){syncInfo.pending=false;queueSync();}},0);
+  });
+  function validISODate(value) {
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const d=parseLocalDate(value);
+    return !!d && !Number.isNaN(d.getTime()) && isoDate(d)===value;
+  }
+  function saveSessionDateInput(el, commit=true) {
+    const key=`${el.dataset.week}|${el.dataset.day}`, value=el.value || '';
+    // Native date fields emit empty/intermediate values while typing; wait for a committed clear.
+    if(!commit && !value) return false;
+    if(value && !validISODate(value)) {
+      if(!commit) return false;
+      el.value=sessionDate(Number(el.dataset.week),el.dataset.day) || '';
+      showToast('Enter a valid calendar date.');
+      return false;
+    }
+    // Keep an explicit empty value as a tombstone for synced/custom dates; sessionDate falls back to the plan date.
+    state.sessionDates[key]=value;
+    persist();
+    if(!value && commit) el.value=sessionDate(Number(el.dataset.week),el.dataset.day) || '';
+    return true;
+  }
+  document.addEventListener('input', e=>{
+    const el=e.target;
+    if(el.dataset.change==='session-date') saveSessionDateInput(el,false);
   });
   document.addEventListener('change', e=>{
     const el=e.target;
     if(el.id==='week-select'){state.ui.week=Number(el.value);state.ui.day='all';persist();render();return;}
     if(el.id==='strength-exercise'){state.ui.strengthExercise=el.value;persist();render();return;}
-    if(el.dataset.change==='session-date'){state.sessionDates[`${el.dataset.week}|${el.dataset.day}`]=el.value;persist();showToast('Session date saved.');return;}
+    if(el.dataset.change==='session-date'){if(saveSessionDateInput(el)) showToast('Session date saved.');return;}
     if(el.id==='backup-file'&&el.files?.[0]){importBackup(el.files[0]);el.value='';}
   });
   document.addEventListener('submit', e=>{

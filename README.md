@@ -4,6 +4,14 @@ RepState is a browser-based hypertrophy tracker with a 44-week plan, workout log
 
 User-added extra sets are labeled separately from planned sets and can be removed; a short Undo option restores a removed set and its logged values.
 
+## Volume completion and flexible session dates
+
+Muscle-group volume completion compares positive-rep prescribed sets against the selected week's actual exercise prescriptions, including Cut and deload adjustments. Completing every prescribed set gives 100% for each prescribed muscle group. Extra completed sets appear separately and do not cover missing prescribed sets; load-only entries are not completed sets.
+
+In **Training log**, select the original planned-day tab, then edit **Session date** and choose **Save date**, or tap **Today**. For example, keep Tuesday's Lower A workout on its Tuesday tab but date it Wednesday; set the remaining workouts' dates individually through Saturday. Dates do not automatically shift the rest of the plan, move exercise logs, or change the program week. Clearing the date restores the scheduled fallback. Custom dates sync using the existing per-session records.
+
+Regression checks: `node tests/repstate_frontend.test.js` and `python3 tests/server_integration_test.py`. The API tests use only a temporary local SQLite database and test accounts, not production accounts or storage. See `UPDATE-2026-10-21.md` for safe deployment notes and this bundle's deployment status.
+
 ## Self-hosted accounts and sync
 
 The sync-enabled app is a single Python service with a same-origin JSON API and a persistent SQLite database. Anyone can create an account using **only a username and password**; there are no email, profile, or other user-information fields. Each username has a separate private tracker dataset, which syncs across that user's browsers and devices after they sign in.
