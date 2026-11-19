@@ -3,7 +3,7 @@
   const STORAGE_KEY = 'repstate_hypertrophy44_v1';
   const SYNC_BASE_KEY = `${STORAGE_KEY}_sync_base_v1`;
   const defaults = {
-    settings: { startDate: '', loadUnit: 'kg', bodyUnit: 'kg', phase: 'Bulk' },
+    settings: { startDate: '', activeWeek: null, loadUnit: 'kg', bodyUnit: 'kg', phase: 'Bulk' },
     logs: {}, checkins: {}, sessionDates: {}, milestones: {}, syncMeta: {},
     ui: { page: 'overview', week: null, day: 'all', strengthExercise: 'Incline DB Bench Press (30°)', quickLog: true }
   };
@@ -64,7 +64,12 @@
   }
   function parseLocalDate(value) { return value ? new Date(`${value}T12:00:00`) : null; }
   function isoDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+  function validWeek(value) {
+    const week = Number(value);
+    return Number.isInteger(week) && week >= 1 && week <= 44;
+  }
   function currentWeek() {
+    if (validWeek(state.settings.activeWeek)) return Number(state.settings.activeWeek);
     if (!state.settings.startDate) return 1;
     const start = parseLocalDate(state.settings.startDate);
     if (!start || Number.isNaN(start.getTime())) return 1;
@@ -341,7 +346,8 @@
     const chosen=state.ui.day==='all'?(days[todayIndex]||days[0]):state.ui.day;
     const list=rows.filter(r=>r.day===chosen);
     const stat=weekStats(w), phase=phaseForWeek(w), isDeload=deload(w);
-    const right=`<div class="page-controls"><select id="week-select" class="select compact" aria-label="Select program week">${weekOptions(w)}</select><button class="button button-quiet button-small" data-action="current-week">Current week</button></div>`;
+    const weekSource=validWeek(state.settings.activeWeek)?'saved':'from start date';
+    const right=`<div class="page-controls"><select id="week-select" class="select compact" aria-label="Select program week">${weekOptions(w)}</select><button class="button button-outline button-small" data-action="set-current-week" title="Save the selected week as your account’s current week">Set selected as current</button><button class="button button-quiet button-small" data-action="current-week" title="Go to the saved current week, or the week calculated from your start date">Current week</button><span class="schedule-status">Current: ${esc(weekLabel(currentWeek()))} · ${weekSource}</span>${validWeek(state.settings.activeWeek)?'<button class="button button-quiet button-small" data-action="reset-active-week" title="Return to the week calculated from your program start date">Use start-date week</button>':''}</div>`;
     const tabs=days.map((d,i)=>`<button class="day-tab ${d===chosen?'active':''}" data-day="${esc(d)}"><span>${['MON','TUE','WED','THU','FRI'][i]||'DAY'}</span> · ${esc(dayTitle(d))}</button>`).join('');
     const dayStat=groupedDayStatus(w,chosen);
     const helper=isDeload?'Deload: about half the sets, 10–20% lighter, 3–4+ RIR. No failure or PRs.':phase==='Cut'?'Cut phase: keep compounds, trim isolation sets, and hold 1–2 RIR.':'Standard block: compound lifts at 1–2 RIR; isolations usually 0–1 RIR.';
@@ -488,7 +494,9 @@
     return merged;
   }
   function applySyncData(data) {
+    const previousCurrent=currentWeek(), followingCurrent=!state.ui.week || Number(state.ui.week)===previousCurrent;
     state.settings={...defaults.settings,...(data.settings||{})};
+    if(followingCurrent && currentWeek()!==previousCurrent) { state.ui.week=currentWeek(); state.ui.day='all'; }
     state.logs=data.logs||{}; state.checkins=data.checkins||{}; state.sessionDates=data.sessionDates||{};
     state.milestones=data.milestones||{}; state.syncMeta=data.syncMeta||{};
     stateSnapshot=JSON.parse(JSON.stringify(state));
@@ -646,6 +654,16 @@
     if(action==='password-change') return changeSyncPassword();
     if(action==='sync-now') return syncNow(true);
     if(action==='sync-logout') return logoutSync();
+    if(action==='set-current-week') {
+      const week=selectedWeek();
+      state.settings.activeWeek=week;state.ui.week=week;state.ui.day='all';
+      persist();render();showToast(`${weekLabel(week)} saved as your current week.`);return;
+    }
+    if(action==='reset-active-week') {
+      state.settings.activeWeek=null;state.ui.week=null;state.ui.day='all';
+      const week=currentWeek();state.ui.week=week;
+      persist();render();showToast('Current week now follows the program start date.');return;
+    }
     if(action==='close-modal') { if(clickedTarget===target || clickedTarget.closest('.modal-close')) closeModal(); return; }
     if(action==='export') return downloadBackup();
     if(action==='import') return document.querySelector('#backup-file')?.click();

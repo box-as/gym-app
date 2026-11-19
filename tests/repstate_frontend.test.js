@@ -29,7 +29,7 @@ function loadApp(sharedStorage={}, fetchImpl=null) {
     `getState:()=>state,setState:x=>{state=x;stateSnapshot=JSON.parse(JSON.stringify(x));},\n`+
     `getProgram:()=>program,setProgram:x=>{program=x;},\n`+
     `storage:localStorage,syncInfo,\n`+
-    `functions:{loadState,todayISO,parseLocalDate,isoDate,currentWeek,weekRows,uniqueDays,\n`+
+    `functions:{loadState,todayISO,parseLocalDate,isoDate,currentWeek,weekRows,uniqueDays,validWeek,syncData,applySyncData,\n`+
     `getPrescription,maxSets,automaticExerciseStatus,statusOf,loggedSetCount,muscleSets,prescribedVolume,copySetValues,\n`+
     `sessionDate,weekStart,hasMeaningfulSyncData,volumeBars,clickAction,syncNow,\n`+
     `mergeSyncData,mergeSyncState:typeof mergeSyncState==='function'?mergeSyncState:null,mergeRecords:typeof mergeRecords==='function'?mergeRecords:null,\n`+
@@ -57,6 +57,30 @@ async function run(){
   const status=f.automaticExerciseStatus; assert(status,'status helper export missing');
   // Actual public program rows receive the same stable IDs as boot(), not synthetic IDs.
   assert.equal(p.exercises[0].id,'1:0');assert.equal(p.exercises.at(-1).id,`44:${p.exercises.length-1}`);
+  // Active week is an account setting, independent of the unchanged program start date and workout records.
+  const week5Api=loadApp(storage);week5Api.setProgram(p);const week5Before={...stateBase(),logs:{'1:keep':{sets:[{load:42,reps:8}]}},checkins:{1:{weight:'80'}}};
+  week5Api.setState({...week5Before,ui:{...week5Before.ui,week:5}});
+  week5Api.functions.clickAction({dataset:{action:'set-current-week'}});
+  assert.equal(week5Api.getState().settings.activeWeek,5,'selected Week 5 is saved as the active week');
+  assert.equal(week5Api.getState().settings.startDate,'2024-01-01','setting active week leaves program start date unchanged');
+  assert.deepEqual(week5Api.getState().logs,week5Before.logs,'setting active week leaves workouts unchanged');
+  assert.deepEqual(week5Api.getState().checkins,week5Before.checkins,'setting active week leaves check-ins unchanged');
+  assert.equal(week5Api.functions.currentWeek(),5,'Current week uses the saved active week');
+  assert.equal(week5Api.functions.syncData().settings.activeWeek,5,'active week is included in the per-account sync payload');
+  const reloaded=loadApp(storage);reloaded.setProgram(p);assert.equal(reloaded.functions.currentWeek(),5,'saved current week survives browser reload');
+  const remoteState=clone(week5Api.functions.syncData());
+  const secondDevice=loadApp({});secondDevice.setProgram(p);secondDevice.setState({...stateBase(),ui:{...stateBase().ui,week:null}});
+  secondDevice.functions.applySyncData(remoteState);assert.equal(secondDevice.functions.currentWeek(),5);assert.equal(secondDevice.getState().ui.week,5,'fresh device follows synced active week');
+  const browsing=loadApp({});browsing.setProgram(p);browsing.setState({...stateBase(),ui:{...stateBase().ui,week:2}});
+  browsing.functions.applySyncData(remoteState);assert.equal(browsing.getState().ui.week,2,'sync does not interrupt deliberate browsing of another week');
+  week5Api.getState().ui.week=2;week5Api.functions.clickAction({dataset:{action:'current-week'}});
+  assert.equal(week5Api.getState().ui.week,5,'Current week returns to saved Week 5');
+  week5Api.functions.clickAction({dataset:{action:'reset-active-week'}});
+  assert.equal(week5Api.getState().settings.activeWeek,null,'date-based current week can be restored');
+  assert.equal(week5Api.getState().settings.startDate,'2024-01-01','resetting the override does not edit the start date');
+  assert.equal(week5Api.functions.currentWeek(),1+(Math.floor((new Date(`${week5Api.functions.todayISO()}T12:00:00`)-new Date('2024-01-01T12:00:00'))/86400000/7)%44),'cleared override falls back to start-date calculation');
+  const invalidWeekApi=loadApp({});invalidWeekApi.setProgram(p);invalidWeekApi.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:45}});
+  assert.equal(invalidWeekApi.functions.currentWeek(),1+(Math.floor((new Date(`${invalidWeekApi.functions.todayISO()}T12:00:00`)-new Date('2024-01-01T12:00:00'))/86400000/7)%44),'invalid active week is ignored');
   // Every week, phase, muscle group, and scheduled deload reaches exactly 100% prescribed volume.
   for(const phase of ['Bulk','Cut','Maintenance']) for(let w=1;w<=44;w++){
     api.setState(stateBase(phase));

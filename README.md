@@ -10,7 +10,11 @@ Muscle-group volume completion compares positive-rep prescribed sets against the
 
 In **Training log**, select the original planned-day tab, then edit **Session date** and choose **Save date**, or tap **Today**. For example, keep Tuesday's Lower A workout on its Tuesday tab but date it Wednesday; set the remaining workouts' dates individually through Saturday. Dates do not automatically shift the rest of the plan, move exercise logs, or change the program week. Clearing the date restores the scheduled fallback. Custom dates sync using the existing per-session records.
 
-Regression checks: `node tests/repstate_frontend.test.js` and `python3 tests/server_integration_test.py`. The API tests use only a temporary local SQLite database and test accounts, not production accounts or storage. See `UPDATE-2026-10-21.md` for safe deployment notes and this bundle's deployment status.
+## Active program week
+
+In **Training log**, choose a week and select **Set selected as current** to save it as your active week. The **Current week** button then returns to that saved week instead of recalculating it from the program start date. **Use start-date week** removes the override. The setting is stored with the signed-in account's settings and syncs only to that account; it does not change the original start date, workouts, or check-ins. Choosing a week in the selector alone remains temporary.
+
+Regression checks: `node tests/repstate_frontend.test.js` and `python3 tests/server_integration_test.py`. The API tests use only a temporary local SQLite database and test accounts, not production accounts or storage. See `UPDATE-2026-11-19.md` for active-week behavior and this bundle's deployment status; `UPDATE-2026-10-21.md` records the preceding volume and session-date changes.
 
 ## Self-hosted accounts and sync
 
