@@ -31,7 +31,7 @@ function loadApp(sharedStorage={}, fetchImpl=null) {
     `storage:localStorage,syncInfo,\n`+
     `functions:{loadState,todayISO,parseLocalDate,isoDate,currentWeek,weekRows,uniqueDays,validWeek,syncData,applySyncData,\n`+
     `getPrescription,maxSets,automaticExerciseStatus,statusOf,loggedSetCount,muscleSets,prescribedVolume,copySetValues,\n`+
-    `sessionDate,weekStart,hasMeaningfulSyncData,volumeBars,clickAction,syncNow,\n`+
+    `sessionDate,weekStart,sessionForDate,nextPlannedSession,overviewSession,navigateToSession,hasMeaningfulSyncData,volumeBars,clickAction,syncNow,\n`+
     `mergeSyncData,mergeSyncState:typeof mergeSyncState==='function'?mergeSyncState:null,mergeRecords:typeof mergeRecords==='function'?mergeRecords:null,\n`+
     `normalizeState:typeof normalizeState==='function'?normalizeState:null,resetState:typeof resetState==='function'?resetState:null,\n`+
     `volumeCompletion,validISODate,saveSessionDateInput}\n};\n`;
@@ -120,6 +120,21 @@ async function run(){
   const reload=loadApp(storage);reload.setProgram(p);assert.equal(reload.getState().sessionDates['1|Tuesday — Lower A'],'2024-01-03');
   dateInput.value='';reload.functions.saveSessionDateInput(dateInput);assert.equal(reload.getState().sessionDates['1|Tuesday — Lower A'],'');assert.equal(reload.functions.sessionDate(1,'Tuesday — Lower A'),'2024-01-02');
   const invalid={value:'2025-02-29',dataset:{change:'session-date',week:'1',day:'Tuesday — Lower A'}};assert.equal(reload.functions.saveSessionDateInput(invalid),false);assert.equal(reload.functions.validISODate('2025-02-29'),false);
+  // Overview resolves a real scheduled/custom session first, then a future session, without inventing a date.
+  const overviewApi=loadApp({});overviewApi.setProgram(p);
+  const tomorrow=new Date(`${overviewApi.functions.todayISO()}T12:00:00`);tomorrow.setDate(tomorrow.getDate()+1);const tomorrowISO=overviewApi.functions.isoDate(tomorrow);
+  const dayAfter=new Date(`${tomorrowISO}T12:00:00`);dayAfter.setDate(dayAfter.getDate()+1);const dayAfterISO=overviewApi.functions.isoDate(dayAfter);
+  overviewApi.setState({...stateBase(),settings:{...stateBase().settings,startDate:'2024-01-01'},sessionDates:{'1|Wednesday — Push B':tomorrowISO,'1|Thursday — Pull B':dayAfterISO}});
+  const matching=overviewApi.functions.sessionForDate(1,tomorrowISO);assert.equal(matching.week,1);assert.equal(matching.day,'Wednesday — Push B');assert.equal(matching.date,tomorrowISO);
+  assert.equal(overviewApi.functions.overviewSession(1).kind,'next','a non-today week selects the next dated session');
+  assert.equal(overviewApi.functions.overviewSession(1).day,'Wednesday — Push B');
+  overviewApi.setState({...overviewApi.getState(),settings:{...overviewApi.getState().settings,startDate:''},sessionDates:{}});
+  assert.equal(overviewApi.functions.overviewSession(1).kind,'week','missing start date does not claim today or invent next-session dates');
+  overviewApi.setState({...overviewApi.getState(),settings:{...overviewApi.getState().settings,startDate:'2024-01-06'}});
+  assert.equal(overviewApi.functions.sessionForDate(1,'2024-01-06')?.day,'Monday — Upper A','weekend starts retain the planned date identity');
+  assert.equal(overviewApi.functions.navigateToSession(3,'Tuesday — Lower A'),true);
+  assert.equal(overviewApi.getState().ui.page,'training');assert.equal(overviewApi.getState().ui.week,3);assert.equal(overviewApi.getState().ui.day,'Tuesday — Lower A');
+  assert.equal(overviewApi.functions.navigateToSession(3,'not a program day'),false);
   const todayApi=loadApp({});todayApi.setProgram(p);todayApi.setState(stateBase());
   const todayInput={value:'',dataset:{change:'session-date',week:'1',day:'Tuesday — Lower A'},matches(sel){return sel==='[data-change="session-date"]';}};
   todayApi.document._elements['#session-date']=todayInput;todayApi.functions.clickAction({dataset:{action:'session-date-today'}});

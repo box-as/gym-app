@@ -189,6 +189,29 @@
     d.setDate(d.getDate() + idx);
     return isoDate(d);
   }
+  function sessionForDate(w, date=todayISO()) {
+    const day = uniqueDays(w).find(candidate => sessionDate(w, candidate) === date);
+    return day ? { week:Number(w), day, date } : null;
+  }
+  function nextPlannedSession(w, date=todayISO()) {
+    const sessions = uniqueDays(w).map(day => ({ week:Number(w), day, date:sessionDate(w, day) }))
+      .filter(session => session.date && session.date > date)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    return sessions[0] || null;
+  }
+  function overviewSession(w) {
+    const today = sessionForDate(w);
+    if (today) return { ...today, kind:'today' };
+    const next = nextPlannedSession(w);
+    if (next) return { ...next, kind:'next' };
+    return { week:Number(w), day:null, date:'', kind:'week' };
+  }
+  function navigateToSession(w, day) {
+    if (!validWeek(w) || !day || !uniqueDays(w).includes(day)) return false;
+    state.ui.page='training'; state.ui.week=Number(w); state.ui.day=day;
+    persist(); render(); window.scrollTo({top:0,behavior:'smooth'});
+    return true;
+  }
   function activeBlock(w) { return weekRows(w)[0]?.block || 'Block 1'; }
   function updateShell() {
     const w = currentWeek();
@@ -280,17 +303,21 @@
     const upcoming=nextMilestone(w);
     const phase=phaseForWeek(w);
     const weekType=deload(w)?'Deload week':`${activeBlock(w)} · ${phase}`;
+    const focus=overviewSession(w);
+    const focusDay=focus.day;
+    const focusLabel=focus.kind==='today'?'Today’s session':focus.kind==='next'?'Next session':'This week’s plan';
+    const focusCta=focusDay?`<button class="button button-light" data-action="navigate-session" data-week="${w}" data-day="${esc(focusDay)}">${focus.kind==='today'?'Open today’s workout':'Open next session'} <span aria-hidden="true">↗</span></button>`:`<button class="button button-light" data-action="navigate-week" data-week="${w}">Open this week’s plan <span aria-hidden="true">↗</span></button>`;
     const bodyWeight=check.weight?`${esc(check.weight)} <small>${esc(state.settings.bodyUnit)}</small>`:'—';
-    const startLine=state.settings.startDate?`Cycle began ${shortDate(state.settings.startDate)} · ${weekType}`:'Set a start date to align dates and milestones · Previewing Week 01';
-    const setup=state.settings.startDate?'':`<div class="setup-alert"><div class="alert-text"><strong>Set up your cycle.</strong> Add your start date and preferred units to align the 44-week schedule. Your training data stays in this browser.</div><div class="alert-actions"><button class="button button-primary button-small" data-action="settings">Set up cycle</button><button class="button button-quiet button-small" data-page="program">Read program rules</button></div></div>`;
+    const startLine=state.settings.startDate?`Cycle began ${shortDate(state.settings.startDate)} · ${weekType}`:`Set a start date to align dates and milestones · ${weekLabel(w)}`;
+    const setup=state.settings.startDate?'':`<div class="setup-alert"><div class="alert-text"><strong>Set up your cycle.</strong> Add your start date and preferred units to align the 44-week schedule. Your training data stays in RepState.</div><div class="alert-actions"><button class="button button-primary button-small" data-action="settings">Set up cycle</button><button class="button button-quiet button-small" data-page="program">Read program rules</button></div></div>`;
     const dayRows=days.map((day,i)=>{
       const status=groupedDayStatus(w,day), total=weekPlan.filter(r=>r.day===day).length;
       const className=status.toLowerCase();
       const badge=status==='Planned'?`${total} exercises`:status;
-      return `<div class="schedule-row"><div class="day-icon">${String(i+1).padStart(2,'0')}</div><div class="schedule-info"><strong>${esc(dayTitle(day))}</strong><span>${esc(day.split('—')[0].trim())} · ${total} planned movements · ${esc(shortDate(sessionDate(w,day)))}</span></div><span class="schedule-status ${className}">${esc(badge)}</span></div>`;
+      return `<div class="schedule-row ${day===focusDay?'selected':''}" data-action="navigate-session" data-week="${w}" data-day="${esc(day)}" role="button" tabindex="0" aria-label="Open ${esc(dayTitle(day))}, ${esc(weekLabel(w))}"><div class="day-icon">${String(i+1).padStart(2,'0')}</div><div class="schedule-info"><strong>${esc(dayTitle(day))}</strong><span>${esc(day.split('—')[0].trim())} · ${total} planned movements · ${esc(shortDate(sessionDate(w,day)))}</span></div><span class="schedule-status ${className}">${esc(badge)}</span></div>`;
     }).join('');
     app.innerHTML=`
-      <section class="hero"><div class="hero-content"><div class="hero-chip"><b></b> THE CONSOLIDATED HYPERTROPHY PROGRAM</div><h1>Strong work.<br>Logged for the long game.</h1><p>${esc(startLine)}<br>Double progression, five training days, and 44 weeks of clear direction.</p><div class="hero-actions"><button class="button button-light" data-page="training">Start today’s workout <span aria-hidden="true">↗</span></button><button class="button button-quiet" data-action="settings">Cycle settings</button></div></div><div class="hero-side"><strong>${String(w).padStart(2,'0')}<span style="font-size:14px;color:#acb7ae"> / 44</span></strong><span>${esc(weekType)}</span></div></section>
+      <section class="hero"><div class="hero-content"><div class="hero-chip"><b></b> THE CONSOLIDATED HYPERTROPHY PROGRAM</div><h1>Strong work.<br>Logged for the long game.</h1><p>${esc(startLine)}<br>${esc(focusLabel)}${focus.date?` · ${esc(shortDate(focus.date))}`:''}</p><div class="hero-actions">${focusCta}<button class="button button-quiet" data-action="settings">Cycle settings</button></div></div><div class="hero-side"><strong>${String(w).padStart(2,'0')}<span style="font-size:14px;color:#acb7ae"> / 44</span></strong><span>${esc(weekType)}</span></div></section>
       ${setup}
       <div class="stat-grid">
         <article class="stat-card"><div class="stat-top"><span>Sessions completed</span><span class="stat-icon">↗</span></div><div class="stat-value">${stats.done}<small> / ${stats.total}</small></div><div class="stat-foot ${stats.done?'good':''}">${stats.partial?`${stats.partial} partial session${stats.partial===1?'':'s'} · `:''}${deload(w)?'Deload pace':'Target five sessions this week'}</div></article>
@@ -343,18 +370,21 @@
   function renderTraining() {
     const w=selectedWeek(), rows=weekRows(w), days=uniqueDays(w);
     const weekday=new Date().getDay(), todayIndex=weekday>=1&&weekday<=5?weekday-1:0;
-    const chosen=state.ui.day==='all'?(days[todayIndex]||days[0]):state.ui.day;
+    const dateMatched=sessionForDate(w);
+    const chosen=state.ui.day==='all'?(dateMatched?.day||days[todayIndex]||days[0]):state.ui.day;
     const list=rows.filter(r=>r.day===chosen);
     const stat=weekStats(w), phase=phaseForWeek(w), isDeload=deload(w);
     const weekSource=validWeek(state.settings.activeWeek)?'saved':'from start date';
     const right=`<div class="page-controls"><select id="week-select" class="select compact" aria-label="Select program week">${weekOptions(w)}</select><button class="button button-outline button-small" data-action="set-current-week" title="Save the selected week as your account’s current week">Set selected as current</button><button class="button button-quiet button-small" data-action="current-week" title="Go to the saved current week, or the week calculated from your start date">Current week</button><span class="schedule-status">Current: ${esc(weekLabel(currentWeek()))} · ${weekSource}</span>${validWeek(state.settings.activeWeek)?'<button class="button button-quiet button-small" data-action="reset-active-week" title="Return to the week calculated from your program start date">Use start-date week</button>':''}</div>`;
-    const tabs=days.map((d,i)=>`<button class="day-tab ${d===chosen?'active':''}" data-day="${esc(d)}"><span>${['MON','TUE','WED','THU','FRI'][i]||'DAY'}</span> · ${esc(dayTitle(d))}</button>`).join('');
+    const tabs=days.map((d,i)=>`<button class="day-tab ${d===chosen?'active':''}" data-day="${esc(d)}" aria-current="${d===chosen?'page':'false'}" aria-pressed="${d===chosen?'true':'false'}"><span>${['MON','TUE','WED','THU','FRI'][i]||'DAY'}</span> · ${esc(dayTitle(d))}</button>`).join('');
     const dayStat=groupedDayStatus(w,chosen);
+    const missing=list.filter(row=>['Planned','Partial'].includes(statusOf(row.id))).length;
+    const daySummary=dayStat==='Done'?'All planned movements complete':dayStat==='Skipped'?'Session skipped':`${list.filter(row=>statusOf(row.id)==='Done').length} complete · ${missing} ${missing===1?'needs work':'need work'}`;
     const helper=isDeload?'Deload: about half the sets, 10–20% lighter, 3–4+ RIR. No failure or PRs.':phase==='Cut'?'Cut phase: keep compounds, trim isolation sets, and hold 1–2 RIR.':'Standard block: compound lifts at 1–2 RIR; isolations usually 0–1 RIR.';
     const suggestedDate=sessionDate(w,chosen)||(weekday>=1&&weekday<=5&&days.indexOf(chosen)===todayIndex?todayISO():'');
     const canCopy=list.some(row=>previousLoggedRow(row,w));
     app.innerHTML=`${pageHead('TRAINING LOG',`${weekLabel(w)} · ${activeBlock(w)}`,`${isDeload?'Scheduled deload week':phase+' phase'} · ${rows.length} exercise entries across five training days`,right)}
-      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status ${dayStat.toLowerCase()}">${esc(dayStat)}</span></div></div><div class="day-tabs">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><label class="training-summary" for="session-date">Session date</label><input id="session-date" class="input" type="date" style="width:auto;min-width:135px" value="${esc(suggestedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}"><button type="button" class="button button-quiet button-small" data-action="session-date-today">Today</button><button type="button" class="button button-outline button-small" data-action="save-session-date">Save date</button>${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">Session date is when you actually train; tabs remain the original planned days. Move a missed session to the next day and adjust the remaining dates, including Saturday, without changing its program week or exercise logs. Entries autosave locally; device sync waits until you pause. Exercise status updates from your reps. ${canCopy?'Copy previous numbers to prefill, then adjust to match today’s performance.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
+      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status ${dayStat.toLowerCase()}" aria-label="${esc(daySummary)}">${esc(dayStat)} · ${esc(daySummary)}</span></div></div><div class="day-tabs" role="group" aria-label="Training days">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><label class="training-summary" for="session-date">Session date</label><input id="session-date" class="input" type="date" style="width:auto;min-width:135px" value="${esc(suggestedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}"><button type="button" class="button button-quiet button-small" data-action="session-date-today">Today</button><button type="button" class="button button-outline button-small" data-action="save-session-date">Save date</button>${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">${esc(daySummary)}. ${canCopy?'Copy previous numbers to prefill, then adjust today’s sets.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
       <div class="two-col"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Week summary</h2><p class="panel-sub">Enter reps for each planned set and statuses update automatically; tap Skip only when you miss a movement.</p></div></div><div class="goal-strip"><div class="goal-item"><span>Completed</span><strong>${stat.done} / ${stat.total} sessions</strong></div><div class="goal-item"><span>Partial</span><strong>${stat.partial} sessions</strong></div><div class="goal-item"><span>Logged work sets</span><strong>${stat.sets}</strong></div><div class="goal-item"><span>Cycle week</span><strong>${String(w).padStart(2,'0')} / 44</strong></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Log note</h2><p class="panel-sub">Remember</p></div></div><p class="page-subtitle">Write down every work set. A delayed session can be logged on a later date: select its original plan-day tab and change Session date. Adjust each remaining session separately; the plan does not shift automatically. If you miss a week or more, repeat the last completed week 5–10% lighter.</p></section></div>`;
   }
   function renderCheckins() {
@@ -648,6 +678,8 @@
     if(action==='session-date-today') { const el=document.querySelector('#session-date'); if(el) { el.value=todayISO(); if(saveSessionDateInput(el)) showToast('Session date saved.'); } return; }
     if(action==='save-session-date') { const el=document.querySelector('#session-date'); if(el && saveSessionDateInput(el)) showToast('Session date saved.'); return; }
     if(action==='settings') return openSettings();
+    if(action==='navigate-session') { navigateToSession(Number(target.dataset.week),target.dataset.day); return; }
+    if(action==='navigate-week') { const week=Number(target.dataset.week); if(validWeek(week)){ state.ui.page='training';state.ui.week=week;state.ui.day='all';persist();render();window.scrollTo({top:0,behavior:'smooth'}); } return; }
     if(action==='sync-login') return loginSync();
     if(action==='sync-register') return registerSync();
     if(action==='sync-mode') { syncInfo.authMode=syncInfo.authMode==='login'?'register':'login'; return openSettings(); }
@@ -817,6 +849,7 @@
     }
   });
   document.addEventListener('keydown',e=>{
+    if((e.key==='Enter'||e.key===' ')&&e.target.matches('.schedule-row[role="button"]')){e.preventDefault();e.target.click();return;}
     if(e.key==='Enter'&&e.target.id==='sync-password'){e.preventDefault();syncInfo.authMode==='register'?registerSync():loginSync();return;}
     if(e.key==='Enter'&&e.target.id==='sync-new-password'){e.preventDefault();changeSyncPassword();return;}
     if(e.key==='Enter'&&e.target.matches('[data-set][data-field]')){
