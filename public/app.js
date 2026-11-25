@@ -70,12 +70,27 @@
   }
   function currentWeek() {
     if (validWeek(state.settings.activeWeek)) return Number(state.settings.activeWeek);
-    if (!state.settings.startDate) return 1;
-    const start = parseLocalDate(state.settings.startDate);
-    if (!start || Number.isNaN(start.getTime())) return 1;
-    const days = Math.floor((new Date(`${todayISO()}T12:00:00`) - start) / 86400000);
-    if (days < 0) return 1;
-    return (Math.floor(days / 7) % 44) + 1;
+    // Legacy accounts with no saved active week resume their latest worked week,
+    // never a week inferred from the calendar or the most recently viewed tab.
+    const weeks = Object.entries(state.logs || {}).filter(([,entry]) =>
+      loggedSetCount(entry) || entry?.status === 'Done' || entry?.status === 'Skipped')
+      .map(([id]) => Number(String(id).split(':')[0])).filter(validWeek);
+    return weeks.length ? Math.max(...weeks) : 1;
+  }
+  function pinCurrentWeek() {
+    if (!validWeek(state.settings.activeWeek)) state.settings.activeWeek = currentWeek();
+  }
+  function weekComplete(w) {
+    const rows = weekRows(w);
+    if (!rows.length) return false;
+    const statuses = rows.map(row => statusOf(row.id));
+    return statuses.some(status => status === 'Done') && statuses.every(status => status === 'Done' || status === 'Skipped');
+  }
+  function advanceCompletedWeek() {
+    const current = currentWeek();
+    if (current >= 44 || !weekComplete(current)) return false;
+    state.settings.activeWeek = current + 1;
+    return true;
   }
   function selectedWeek() { return Math.max(1, Math.min(44, Number(state.ui.week) || currentWeek())); }
   function weekLabel(w) { return `Week ${String(w).padStart(2,'0')}`; }
@@ -118,8 +133,8 @@
     const rows = weekRows(w).filter(r => r.day === day);
     if (!rows.length) return 'Planned';
     const statuses = rows.map(r => statusOf(r.id));
-    if (statuses.every(s => s === 'Done')) return 'Done';
     if (statuses.every(s => s === 'Skipped')) return 'Skipped';
+    if (statuses.every(s => s === 'Done' || s === 'Skipped')) return 'Done';
     if (statuses.some(s => s === 'Done' || s === 'Partial' || s === 'Skipped')) return 'Partial';
     return 'Planned';
   }
@@ -180,14 +195,17 @@
     return isoDate(d);
   }
   function sessionDate(w, day) {
-    const k = `${w}|${day}`;
-    if (state.sessionDates[k]) return state.sessionDates[k];
-    const d0 = weekStart(w);
-    if (!d0) return '';
-    const d = parseLocalDate(d0);
-    const idx = Math.max(0, uniqueDays(w).indexOf(day));
-    d.setDate(d.getDate() + idx);
-    return isoDate(d);
+    return state.sessionDates?.[`${w}|${day}`] || '';
+  }
+  function ensureSessionDate(w, day) {
+    state.sessionDates ||= {};
+    const key = `${w}|${day}`;
+    // An existing custom date or historic empty tombstone must never be replaced.
+    if (!Object.prototype.hasOwnProperty.call(state.sessionDates, key)) {
+      state.sessionDates[key] = todayISO();
+      return true;
+    }
+    return false;
   }
   function sessionForDate(w, date=todayISO()) {
     const day = uniqueDays(w).find(candidate => sessionDate(w, candidate) === date);
@@ -200,11 +218,10 @@
     return sessions[0] || null;
   }
   function overviewSession(w) {
-    const today = sessionForDate(w);
-    if (today) return { ...today, kind:'today' };
-    const next = nextPlannedSession(w);
-    if (next) return { ...next, kind:'next' };
-    return { week:Number(w), day:null, date:'', kind:'week' };
+    const days = uniqueDays(w);
+    const day = days.find(d => !['Done','Skipped'].includes(groupedDayStatus(w,d))) || null;
+    return day ? { week:Number(w), day, date:sessionDate(w,day), kind:'next' } :
+      { week:Number(w), day:null, date:'', kind:'week' };
   }
   function navigateToSession(w, day) {
     if (!validWeek(w) || !day || !uniqueDays(w).includes(day)) return false;
@@ -223,6 +240,8 @@
     if (sw) sw.textContent = `${String(w).padStart(2,'0')} / 44`;
     if (progress) progress.style.width = `${Math.max(0, Math.min(100, (w-1)/44*100))}%`;
     if (block) block.textContent = `${activeBlock(w)} · ${deload(w) ? 'Deload' : phaseForWeek(w)}`;
+    const currentBadge = document.querySelector('.current-week-badge');
+    if (currentBadge) currentBadge.textContent = `Current: ${weekLabel(w)}${w===44&&weekComplete(44)?' · Cycle complete':''}`;
     document.querySelectorAll('[data-page]').forEach(b => {
       b.classList.toggle('active', b.dataset.page === state.ui.page);
     });
@@ -308,13 +327,13 @@
     const focusLabel=focus.kind==='today'?'Today’s session':focus.kind==='next'?'Next session':'This week’s plan';
     const focusCta=focusDay?`<button class="button button-light" data-action="navigate-session" data-week="${w}" data-day="${esc(focusDay)}">${focus.kind==='today'?'Open today’s workout':'Open next session'} <span aria-hidden="true">↗</span></button>`:`<button class="button button-light" data-action="navigate-week" data-week="${w}">Open this week’s plan <span aria-hidden="true">↗</span></button>`;
     const bodyWeight=check.weight?`${esc(check.weight)} <small>${esc(state.settings.bodyUnit)}</small>`:'—';
-    const startLine=state.settings.startDate?`Cycle began ${shortDate(state.settings.startDate)} · ${weekType}`:`Set a start date to align dates and milestones · ${weekLabel(w)}`;
-    const setup=state.settings.startDate?'':`<div class="setup-alert"><div class="alert-text"><strong>Set up your cycle.</strong> Add your start date and preferred units to align the 44-week schedule. Your training data stays in RepState.</div><div class="alert-actions"><button class="button button-primary button-small" data-action="settings">Set up cycle</button><button class="button button-quiet button-small" data-page="program">Read program rules</button></div></div>`;
+    const startLine=`${weekLabel(w)} · ${weekType} · Progress at your own pace`;
+    const setup='';
     const dayRows=days.map((day,i)=>{
       const status=groupedDayStatus(w,day), total=weekPlan.filter(r=>r.day===day).length;
       const className=status.toLowerCase();
       const badge=status==='Planned'?`${total} exercises`:status;
-      return `<div class="schedule-row ${day===focusDay?'selected':''}" data-action="navigate-session" data-week="${w}" data-day="${esc(day)}" role="button" tabindex="0" aria-label="Open ${esc(dayTitle(day))}, ${esc(weekLabel(w))}"><div class="day-icon">${String(i+1).padStart(2,'0')}</div><div class="schedule-info"><strong>${esc(dayTitle(day))}</strong><span>${esc(day.split('—')[0].trim())} · ${total} planned movements · ${esc(shortDate(sessionDate(w,day)))}</span></div><span class="schedule-status ${className}">${esc(badge)}</span></div>`;
+      return `<div class="schedule-row ${day===focusDay?'selected':''}" data-action="navigate-session" data-week="${w}" data-day="${esc(day)}" role="button" tabindex="0" aria-label="Open ${esc(dayTitle(day))}, ${esc(weekLabel(w))}"><div class="day-icon">${String(i+1).padStart(2,'0')}</div><div class="schedule-info"><strong>${esc(dayTitle(day))}</strong><span>${esc(day.split('—')[0].trim())} · ${total} planned movements${sessionDate(w,day)?` · ${esc(shortDate(sessionDate(w,day)))}`:''}</span></div><span class="schedule-status ${className}">${esc(badge)}</span></div>`;
     }).join('');
     app.innerHTML=`
       <section class="hero"><div class="hero-content"><div class="hero-chip"><b></b> THE CONSOLIDATED HYPERTROPHY PROGRAM</div><h1>Strong work.<br>Logged for the long game.</h1><p>${esc(startLine)}<br>${esc(focusLabel)}${focus.date?` · ${esc(shortDate(focus.date))}`:''}</p><div class="hero-actions">${focusCta}<button class="button button-quiet" data-action="settings">Cycle settings</button></div></div><div class="hero-side"><strong>${String(w).padStart(2,'0')}<span style="font-size:14px;color:#acb7ae"> / 44</span></strong><span>${esc(weekType)}</span></div></section>
@@ -369,23 +388,20 @@
   }
   function renderTraining() {
     const w=selectedWeek(), rows=weekRows(w), days=uniqueDays(w);
-    const weekday=new Date().getDay(), todayIndex=weekday>=1&&weekday<=5?weekday-1:0;
-    const dateMatched=sessionForDate(w);
-    const chosen=state.ui.day==='all'?(dateMatched?.day||days[todayIndex]||days[0]):state.ui.day;
+    const chosen=state.ui.day==='all'?(overviewSession(w).day||days[0]):state.ui.day;
     const list=rows.filter(r=>r.day===chosen);
     const stat=weekStats(w), phase=phaseForWeek(w), isDeload=deload(w);
-    const weekSource=validWeek(state.settings.activeWeek)?'saved':'from start date';
-    const right=`<div class="page-controls"><select id="week-select" class="select compact" aria-label="Select program week">${weekOptions(w)}</select><button class="button button-outline button-small" data-action="set-current-week" title="Save the selected week as your account’s current week">Set selected as current</button><button class="button button-quiet button-small" data-action="current-week" title="Go to the saved current week, or the week calculated from your start date">Current week</button><span class="schedule-status">Current: ${esc(weekLabel(currentWeek()))} · ${weekSource}</span>${validWeek(state.settings.activeWeek)?'<button class="button button-quiet button-small" data-action="reset-active-week" title="Return to the week calculated from your program start date">Use start-date week</button>':''}</div>`;
+    const right=`<div class="page-controls"><select id="week-select" class="select compact" aria-label="Select program week">${weekOptions(w)}</select><button class="button button-quiet button-small" data-action="current-week" title="Return to your current program week">Current week</button><span class="schedule-status current-week-badge">Current: ${esc(weekLabel(currentWeek()))}${currentWeek()===44&&weekComplete(44)?' · Cycle complete':''}</span></div>`;
     const tabs=days.map((d,i)=>`<button class="day-tab ${d===chosen?'active':''}" data-day="${esc(d)}" aria-current="${d===chosen?'page':'false'}" aria-pressed="${d===chosen?'true':'false'}"><span>${['MON','TUE','WED','THU','FRI'][i]||'DAY'}</span> · ${esc(dayTitle(d))}</button>`).join('');
     const dayStat=groupedDayStatus(w,chosen);
     const missing=list.filter(row=>['Planned','Partial'].includes(statusOf(row.id))).length;
     const daySummary=dayStat==='Done'?'All planned movements complete':dayStat==='Skipped'?'Session skipped':`${list.filter(row=>statusOf(row.id)==='Done').length} complete · ${missing} ${missing===1?'needs work':'need work'}`;
     const helper=isDeload?'Deload: about half the sets, 10–20% lighter, 3–4+ RIR. No failure or PRs.':phase==='Cut'?'Cut phase: keep compounds, trim isolation sets, and hold 1–2 RIR.':'Standard block: compound lifts at 1–2 RIR; isolations usually 0–1 RIR.';
-    const suggestedDate=sessionDate(w,chosen)||(weekday>=1&&weekday<=5&&days.indexOf(chosen)===todayIndex?todayISO():'');
+    const recordedDate=sessionDate(w,chosen);
     const canCopy=list.some(row=>previousLoggedRow(row,w));
     app.innerHTML=`${pageHead('TRAINING LOG',`${weekLabel(w)} · ${activeBlock(w)}`,`${isDeload?'Scheduled deload week':phase+' phase'} · ${rows.length} exercise entries across five training days`,right)}
-      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status training-status ${dayStat.toLowerCase()}" aria-label="${esc(daySummary)}">${esc(dayStat)} · ${esc(daySummary)}</span></div></div><div class="day-tabs" role="group" aria-label="Training days">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><label class="training-summary" for="session-date">Session date</label><input id="session-date" class="input" type="date" style="width:auto;min-width:135px" value="${esc(suggestedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}"><button type="button" class="button button-quiet button-small" data-action="session-date-today">Today</button><button type="button" class="button button-outline button-small" data-action="save-session-date">Save date</button>${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">${esc(daySummary)}. ${canCopy?'Copy previous numbers to prefill, then adjust today’s sets.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
-      <div class="two-col"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Week summary</h2><p class="panel-sub">Enter reps for each planned set and statuses update automatically; tap Skip only when you miss a movement.</p></div></div><div class="goal-strip"><div class="goal-item"><span>Completed</span><strong>${stat.done} / ${stat.total} sessions</strong></div><div class="goal-item"><span>Partial</span><strong>${stat.partial} sessions</strong></div><div class="goal-item"><span>Logged work sets</span><strong>${stat.sets}</strong></div><div class="goal-item"><span>Cycle week</span><strong>${String(w).padStart(2,'0')} / 44</strong></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Log note</h2><p class="panel-sub">Remember</p></div></div><p class="page-subtitle">Write down every work set. A delayed session can be logged on a later date: select its original plan-day tab and change Session date. Adjust each remaining session separately; the plan does not shift automatically. If you miss a week or more, repeat the last completed week 5–10% lighter.</p></section></div>`;
+      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">${esc(weekLabel(w))} training plan</h2><p class="panel-sub">${esc(helper)}</p></div><div class="toolbar-right"><span class="schedule-status training-status ${dayStat.toLowerCase()}" aria-label="${esc(daySummary)}">${esc(dayStat)} · ${esc(daySummary)}</span></div></div><div class="day-tabs" role="group" aria-label="Training days">${tabs}</div><div class="training-toolbar"><div class="training-summary">${list.length} movements · ${esc(phase)} prescriptions${isDeload?' · deload overrides':''}</div><div class="toolbar-right"><div class="session-date-display" data-week="${w}" data-day="${esc(chosen)}"><span class="training-summary">Session date: <strong>${recordedDate?esc(shortDate(recordedDate)):'Set automatically when you log'}</strong></span><details class="session-date-editor"><summary class="button button-quiet button-small">Edit date</summary><label for="session-date">Change session date</label><input id="session-date" class="input" type="date" value="${esc(recordedDate)}" data-change="session-date" data-week="${w}" data-day="${esc(chosen)}"></details></div>${canCopy?`<button class="button button-outline button-small" data-action="copy-last-session" data-week="${w}" data-day="${esc(chosen)}">Copy previous numbers</button>`:''}<button class="button button-quiet button-small" data-action="toggle-quick-log">${state.ui.quickLog===false?'Quick log all exercises':'Hide set inputs'}</button><button class="button button-primary button-small" data-action="mark-day" data-week="${w}" data-day="${esc(chosen)}">Finish workout</button></div></div><p class="quick-log-note">${esc(daySummary)}. ${canCopy?'Copy previous numbers to prefill, then adjust today’s sets.':''}</p><div class="exercise-list">${list.map((r,i)=>renderExerciseCard(r,i,w)).join('')}</div></section>
+      <div class="two-col"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Week summary</h2><p class="panel-sub">Enter reps for each planned set and statuses update automatically; tap Skip only when you miss a movement.</p></div></div><div class="goal-strip"><div class="goal-item"><span>Completed</span><strong>${stat.done} / ${stat.total} sessions</strong></div><div class="goal-item"><span>Partial</span><strong>${stat.partial} sessions</strong></div><div class="goal-item"><span>Logged work sets</span><strong>${stat.sets}</strong></div><div class="goal-item"><span>Cycle week</span><strong>${String(w).padStart(2,'0')} / 44</strong></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Log note</h2><p class="panel-sub">Remember</p></div></div><p class="page-subtitle">Your session date is recorded automatically when you first log a set or finish a workout. Use Edit date only if it needs correcting. Complete or skip each movement to advance to the next program week; time off does not skip weeks.</p></section></div>`;
   }
   function renderCheckins() {
     const w=selectedWeek(), v=state.checkins[w]||{}, phase=v.phase||state.settings.phase||'Bulk';
@@ -397,7 +413,7 @@
     const field=(name,label,unit,help='',step='any')=>`<div class="field"><label for="ci-${name}">${label}${unit?` <span style="font-weight:500;color:#87928a">(${unit})</span>`:''}</label><input class="input" id="ci-${name}" name="${name}" type="number" inputmode="decimal" step="${step}" min="0" value="${esc(v[name]??'')}"><span class="field-help">${help}</span></div>`;
     app.innerHTML=`${pageHead('WEEKLY REVIEW',`${weekLabel(w)} check-in`,'Capture the weekly averages that help explain training performance.',`<div class="page-controls"><select id="week-select" class="select compact" aria-label="Select check-in week">${weekOptions(w)}</select></div>`)}
       <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Targets for ${esc(phase.toLowerCase())}</h2><p class="panel-sub">Use the program’s reference ranges; adjust based on your context and recovery.</p></div></div><div class="goal-strip">${targets.map(t=>`<div class="goal-item"><span>${esc(t[0])}</span><strong>${esc(t[1])}</strong></div>`).join('')}</div></section>
-      <form id="checkin-form" class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Body, nutrition & recovery</h2><p class="panel-sub">Enter weekly averages where possible; leave unknown values blank.</p></div><span class="schedule-status">${state.settings.startDate?`Week starting ${esc(shortDate(weekStart(w)))}`:'Cycle start date not set'}</span></div>
+      <form id="checkin-form" class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Body, nutrition & recovery</h2><p class="panel-sub">Enter weekly averages where possible; leave unknown values blank.</p></div><span class="schedule-status">${esc(weekLabel(w))}</span></div>
         <input type="hidden" name="week" value="${w}"><div class="checkin-grid">
           ${field('weight','Average bodyweight',state.settings.bodyUnit,'Weekly average, ideally several morning weigh-ins')}
           ${field('waist','Waist circumference',state.settings.bodyUnit,'Measure consistently, e.g. at the navel')}
@@ -437,7 +453,7 @@
     const targets=Object.entries(program.volumeTargets).map(([m,v])=>`<div class="goal-item"><span>${esc(m)}</span><strong>${esc(v)} sets / week</strong></div>`).join('');
     const right=`<div class="page-controls"><a class="button button-outline button-small" href="/reference.html">Full program Markdown ↗</a><button class="button button-primary button-small" data-page="training">Open training log ↗</button></div>`;
     app.innerHTML=`${pageHead('PROGRAM REFERENCE','The 44-week plan','All block swaps, training rules, nutrition targets, and milestone checkpoints, with the current full Markdown reference.',right)}
-      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Four-block rotation</h2><p class="panel-sub">Ten weeks of training followed by a deload; repeat the loop after Week 44.</p></div></div><div class="block-roadmap"><div class="block-card"><strong>Block 1</strong><span>Weeks 1–10</span><small>Foundational exercise selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 11</span><small>Half sets · 10–20% lighter, then retained loads resume</small></div><div class="block-card"><strong>Block 2</strong><span>Weeks 12–21</span><small>Stretch and contraction swaps</small></div><div class="block-card"><strong>Deload</strong><span>Week 22</span><small>Unchanged lifts resume at prior loads</small></div><div class="block-card"><strong>Block 3</strong><span>Weeks 23–32</span><small>Fresh accessory selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 33</span><small>Unchanged lifts resume at prior loads</small></div><div class="block-card"><strong>Block 4</strong><span>Weeks 34–43</span><small>Accessory swaps; main lifts stay</small></div><div class="block-card"><strong>Deload</strong><span>Week 44</span><small>Then repeat from Week 1</small></div></div></section>
+      <section class="panel"><div class="panel-head"><div><h2 class="panel-title">Four-block rotation</h2><p class="panel-sub">Ten weeks of training followed by a deload. Week 44 stays complete to protect your history.</p></div></div><div class="block-roadmap"><div class="block-card"><strong>Block 1</strong><span>Weeks 1–10</span><small>Foundational exercise selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 11</span><small>Half sets · 10–20% lighter, then retained loads resume</small></div><div class="block-card"><strong>Block 2</strong><span>Weeks 12–21</span><small>Stretch and contraction swaps</small></div><div class="block-card"><strong>Deload</strong><span>Week 22</span><small>Unchanged lifts resume at prior loads</small></div><div class="block-card"><strong>Block 3</strong><span>Weeks 23–32</span><small>Fresh accessory selections</small></div><div class="block-card"><strong>Deload</strong><span>Week 33</span><small>Unchanged lifts resume at prior loads</small></div><div class="block-card"><strong>Block 4</strong><span>Weeks 34–43</span><small>Accessory swaps; main lifts stay</small></div><div class="block-card"><strong>Deload</strong><span>Week 44</span><small>Cycle complete · history stays safe</small></div></div></section>
       <section class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Weekly training split</h2><p class="panel-sub">Five sessions · two full rest days · about 60–75 minutes per session</p></div></div><div class="split-grid">${program.trainingDays.map(day=>`<div class="split-day"><strong>${esc(day.split('—')[0].trim())}</strong><span>${esc(day.split('—').slice(1).join('—').trim())}</span></div>`).join('')}</div></section>
       <section class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Block 1 weekly hard-set targets</h2><p class="panel-sub">Reference ranges from the program brief; later blocks carry the same general structure.</p></div></div><div class="goal-strip">${targets}</div></section>
       <section class="panel" style="margin-top:14px"><div class="panel-head"><div><h2 class="panel-title">Rules & practical guidance</h2><p class="panel-sub">The program’s operating notes from the workbook reference tab.</p></div></div><div class="guide-grid">${ref}</div></section>
@@ -468,7 +484,7 @@
     toastTimer=setTimeout(()=>el.classList.remove('show'),action==='undo-delete-set'?6000:2400);
   }
   function openSettings() {
-    modalRoot.innerHTML=`<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="modal-head"><div><h2 id="settings-title">Cycle settings</h2><p>Set up your schedule and preferred units.</p></div><button class="modal-close" data-action="close-modal" aria-label="Close">×</button></div><form id="settings-form" class="modal-form"><div class="field"><label for="setting-start">Program start date</label><input class="input" id="setting-start" name="startDate" type="date" value="${esc(state.settings.startDate)}"><span class="field-help">Use the first day of Week 1; the schedule follows Monday to Friday.</span></div><div class="checkin-grid"><div class="field"><label for="setting-load">Training load unit</label><select class="select" id="setting-load" name="loadUnit"><option ${state.settings.loadUnit==='kg'?'selected':''}>kg</option><option ${state.settings.loadUnit==='lb'?'selected':''}>lb</option></select></div><div class="field"><label for="setting-body">Bodyweight unit</label><select class="select" id="setting-body" name="bodyUnit"><option ${state.settings.bodyUnit==='kg'?'selected':''}>kg</option><option ${state.settings.bodyUnit==='lb'?'selected':''}>lb</option></select></div><div class="field wide"><label for="setting-phase">Current nutrition phase</label><select class="select" id="setting-phase" name="phase"><option ${state.settings.phase==='Bulk'?'selected':''}>Bulk</option><option ${state.settings.phase==='Cut'?'selected':''}>Cut</option><option ${state.settings.phase==='Maintenance'?'selected':''}>Maintenance</option></select><span class="field-help">Check-ins can record phase changes by week.</span></div></div><div class="notice-box">Your workout logs and check-ins are stored only in this browser’s local storage. They are not uploaded to the hosted app. Export a backup before moving to another browser or device.</div><div class="modal-actions"><button type="button" class="button button-quiet button-small" data-action="import">Import backup</button><button type="submit" class="button button-primary">Save settings</button></div><input id="backup-file" type="file" accept="application/json,.json" hidden></form></section></div>`;
+    modalRoot.innerHTML=`<div class="modal-backdrop" data-action="close-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="modal-head"><div><h2 id="settings-title">Cycle settings</h2><p>Set your preferred units and nutrition phase.</p></div><button class="modal-close" data-action="close-modal" aria-label="Close">×</button></div><form id="settings-form" class="modal-form"><div class="checkin-grid"><div class="field"><label for="setting-load">Training load unit</label><select class="select" id="setting-load" name="loadUnit"><option ${state.settings.loadUnit==='kg'?'selected':''}>kg</option><option ${state.settings.loadUnit==='lb'?'selected':''}>lb</option></select></div><div class="field"><label for="setting-body">Bodyweight unit</label><select class="select" id="setting-body" name="bodyUnit"><option ${state.settings.bodyUnit==='kg'?'selected':''}>kg</option><option ${state.settings.bodyUnit==='lb'?'selected':''}>lb</option></select></div><div class="field wide"><label for="setting-phase">Current nutrition phase</label><select class="select" id="setting-phase" name="phase"><option ${state.settings.phase==='Bulk'?'selected':''}>Bulk</option><option ${state.settings.phase==='Cut'?'selected':''}>Cut</option><option ${state.settings.phase==='Maintenance'?'selected':''}>Maintenance</option></select><span class="field-help">Check-ins can record phase changes by week.</span></div></div><div class="notice-box">Your workout logs and check-ins are stored only in this browser’s local storage. They are not uploaded to the hosted app. Export a backup before moving to another browser or device.</div><div class="modal-actions"><button type="button" class="button button-quiet button-small" data-action="import">Import backup</button><button type="submit" class="button button-primary">Save settings</button></div><input id="backup-file" type="file" accept="application/json,.json" hidden></form></section></div>`;
     const syncPanel = document.createElement('section');
     syncPanel.className = 'sync-panel';
     syncPanel.innerHTML = `<div class="sync-panel-head"><div><h3>Private device sync</h3><p>Keep this tracker in sync across your devices using your private RepState account.</p></div><span class="schedule-status ${syncInfo.loggedIn?'done':''}">${syncInfo.loggedIn?'Connected':'Optional'}</span></div>${syncInfo.loggedIn?`<p class="sync-account">Signed in as <strong>${esc(syncInfo.username)}</strong></p><div class="modal-actions"><button type="button" class="button button-outline button-small" data-action="sync-now">Sync now</button><button type="button" class="button button-quiet button-small" data-action="sync-logout">Sign out</button></div><div class="checkin-grid"><div class="field"><label for="sync-current-password">Current password</label><input class="input" id="sync-current-password" type="password" autocomplete="current-password" placeholder="Current password"></div><div class="field"><label for="sync-new-password">New password</label><input class="input" id="sync-new-password" type="password" autocomplete="new-password" minlength="10" maxlength="256" placeholder="At least 10 characters"></div></div><div class="modal-actions"><button type="button" class="button button-outline button-small" data-action="password-change">Change password</button></div>`:`<p class="field-help">${syncInfo.authMode==='register'?'Create an account with only a username and password. No email or profile details are needed.':'Sign in with your username and password. If you used RepState’s earlier email login, enter that same value as your username.'}</p><div class="checkin-grid"><div class="field"><label for="sync-username">Username</label><input class="input" id="sync-username" type="text" autocomplete="username" maxlength="254" value="${esc(syncInfo.lastUsername)}" placeholder="Choose or enter a username"></div><div class="field"><label for="sync-password">Password</label><input class="input" id="sync-password" type="password" autocomplete="${syncInfo.authMode==='register'?'new-password':'current-password'}" ${syncInfo.authMode==='register'?'minlength="10"':''} maxlength="256" placeholder="${syncInfo.authMode==='register'?'At least 10 characters':'Enter your password'}"></div></div><div class="modal-actions"><button type="button" class="button button-primary" data-action="${syncInfo.authMode==='register'?'sync-register':'sync-login'}">${syncInfo.authMode==='register'?'Create account and sync':'Sign in and sync'}</button><button type="button" class="button button-quiet button-small" data-action="sync-mode">${syncInfo.authMode==='register'?'Already have an account? Sign in':'Create an account'}</button></div>`}`;
@@ -476,7 +492,7 @@
     form?.querySelector('.notice-box')?.before(syncPanel);
     const localNotice = form?.querySelector('.notice-box');
     if (localNotice) localNotice.textContent = syncInfo.loggedIn ? 'A local copy stays on this device; changes also sync to your private RepState account. Keep exporting backups for extra protection.' : 'Until you sign in to private sync, workout logs and check-ins remain only in this browser. Export a backup before changing browsers or devices.';
-    modalRoot.querySelector('#setting-start')?.focus();
+    modalRoot.querySelector('#setting-load')?.focus();
   }
   function closeModal() { modalRoot.innerHTML=''; }
   function downloadBackup() {
@@ -526,11 +542,13 @@
   function applySyncData(data) {
     const previousCurrent=currentWeek(), followingCurrent=!state.ui.week || Number(state.ui.week)===previousCurrent;
     state.settings={...defaults.settings,...(data.settings||{})};
-    if(followingCurrent && currentWeek()!==previousCurrent) { state.ui.week=currentWeek(); state.ui.day='all'; }
     state.logs=data.logs||{}; state.checkins=data.checkins||{}; state.sessionDates=data.sessionDates||{};
     state.milestones=data.milestones||{}; state.syncMeta=data.syncMeta||{};
     stateSnapshot=JSON.parse(JSON.stringify(state));
-    localStorage.setItem(currentStorageKey(),JSON.stringify(state));
+    const advanced=program && advanceCompletedWeek();
+    if(followingCurrent && currentWeek()!==previousCurrent) { state.ui.week=currentWeek(); state.ui.day='all'; }
+    if(advanced) persist();
+    else localStorage.setItem(currentStorageKey(),JSON.stringify(state));
   }
   function refreshPrivacyStatus() {
     const note=document.querySelector('.privacy-note span:last-child');
@@ -582,6 +600,7 @@
       else if(!hasMeaningfulSyncData(local)&&hasMeaningfulSyncData(remote.state)) merged=remote.state;
       else merged=mergeSyncData(baseRecord?.state||{},local,remote.state);
       if(!remote.state||!sameJSON(merged,remote.state)) {
+        if(localEditRevision!==revisionAtStart||isEditableInputFocused()) { syncInfo.pending=true; return; }
         let put=await fetch('/api/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:merged,revision:remote.revision||0})});
         if(put.status===409) {
           const conflict=await put.json();
@@ -599,6 +618,7 @@
         return;
       }
       if(localChanged) { applySyncData(merged); render(); }
+      else if(program && advanceCompletedWeek()) { persist(); render(); }
       localStorage.setItem(syncBaseStorageKey(),JSON.stringify({state:merged,revision:remote.revision||0}));
       setSavedStatus('Synced across devices'); succeeded=true;
       if(announce) showToast('Your tracker is synced across devices.');
@@ -675,8 +695,6 @@
   function clickAction(target, clickedTarget=target) {
     const action=target.dataset.action;
     if(!action) return;
-    if(action==='session-date-today') { const el=document.querySelector('#session-date'); if(el) { el.value=todayISO(); if(saveSessionDateInput(el)) showToast('Session date saved.'); } return; }
-    if(action==='save-session-date') { const el=document.querySelector('#session-date'); if(el && saveSessionDateInput(el)) showToast('Session date saved.'); return; }
     if(action==='settings') return openSettings();
     if(action==='navigate-session') { navigateToSession(Number(target.dataset.week),target.dataset.day); return; }
     if(action==='navigate-week') { const week=Number(target.dataset.week); if(validWeek(week)){ state.ui.page='training';state.ui.week=week;state.ui.day='all';persist();render();window.scrollTo({top:0,behavior:'smooth'}); } return; }
@@ -686,16 +704,6 @@
     if(action==='password-change') return changeSyncPassword();
     if(action==='sync-now') return syncNow(true);
     if(action==='sync-logout') return logoutSync();
-    if(action==='set-current-week') {
-      const week=selectedWeek();
-      state.settings.activeWeek=week;state.ui.week=week;state.ui.day='all';
-      persist();render();showToast(`${weekLabel(week)} saved as your current week.`);return;
-    }
-    if(action==='reset-active-week') {
-      state.settings.activeWeek=null;state.ui.week=null;state.ui.day='all';
-      const week=currentWeek();state.ui.week=week;
-      persist();render();showToast('Current week now follows the program start date.');return;
-    }
     if(action==='close-modal') { if(clickedTarget===target || clickedTarget.closest('.modal-close')) closeModal(); return; }
     if(action==='export') return downloadBackup();
     if(action==='import') return document.querySelector('#backup-file')?.click();
@@ -739,6 +747,7 @@
       persist();render();showToast('Extra set restored.');return;
     }
     if(action==='copy-last-exercise') {
+      pinCurrentWeek();
       const id=target.dataset.id,row=program.exercises.find(exercise=>exercise.id===id),previous=row&&previousLoggedRow(row,row.week);
       if(!row||!previous){showToast('No prior set numbers were found for this exercise.');return;}
       const current=state.logs[id]||{status:'Planned',sets:[]};
@@ -749,16 +758,19 @@
       const sets=Array.from({length:count},(_,i)=>copySetValues(hasValues(source[i])?source[i]:lastSource));
       const updated={...current,sets};
       state.logs[id]={...updated,status:automaticExerciseStatus(row,updated)};
-      persist();render();showToast(`Prefilled from ${weekLabel(previous.week)}. Adjust today’s loads and reps as needed.`);return;
+      if(loggedSetCount(updated)) ensureSessionDate(row.week,row.day);
+      advanceCompletedWeek();persist();render();showToast(`Prefilled from ${weekLabel(previous.week)}. Adjust today’s loads and reps as needed.`);return;
     }
     if(action==='toggle-skip') {
+      pinCurrentWeek();
       const id=target.dataset.id,entry=state.logs[id]||{status:'Planned',sets:[]};
       if(loggedSetCount(entry)) return;
-      state.logs[id]={...entry,status:statusOf(id)==='Skipped'?'Planned':'Skipped'};persist();render();return;
+      state.logs[id]={...entry,status:statusOf(id)==='Skipped'?'Planned':'Skipped'};advanceCompletedWeek();persist();render();return;
     }
     if(action==='current-week') {state.ui.week=currentWeek();state.ui.day='all';persist();render();return;}
     if(action==='toggle-quick-log') {state.ui.quickLog=state.ui.quickLog===false;state.ui.openExercise=null;persist();render();return;}
     if(action==='copy-last-session') {
+      pinCurrentWeek();
       const w=Number(target.dataset.week),day=target.dataset.day;let copied=0;
       weekRows(w).filter(row=>row.day===day).forEach(row=>{
         const current=state.logs[row.id]||{status:'Planned',sets:[]};if(loggedSetCount(current)>0)return;
@@ -770,9 +782,9 @@
         const sets=Array.from({length:count},(_,i)=>copySetValues(hasValues(source[i])?source[i]:lastSource));
         state.logs[row.id]={...current,sets};copied++;
       });
-      persist();render();showToast(copied?`Copied numbers for ${copied} exercise${copied===1?'':'s'}. Review and adjust today’s sets.`:'No previous set numbers found.');return;
+      if(copied) ensureSessionDate(w,day);advanceCompletedWeek();persist();render();showToast(copied?`Copied numbers for ${copied} exercise${copied===1?'':'s'}. Review and adjust today’s sets.`:'No previous set numbers found.');return;
     }
-    if(action==='mark-day') {const w=Number(target.dataset.week),day=target.dataset.day;weekRows(w).filter(r=>r.day===day).forEach(r=>state.logs[r.id]={...(state.logs[r.id]||{}),status:'Done'});persist();render();showToast('Day marked complete. Add set details when ready.');return;}
+    if(action==='mark-day') {pinCurrentWeek();const w=Number(target.dataset.week),day=target.dataset.day;weekRows(w).filter(r=>r.day===day).forEach(r=>state.logs[r.id]={...(state.logs[r.id]||{}),status:'Done'});ensureSessionDate(w,day);const advanced=advanceCompletedWeek();persist();render();showToast(advanced?`${weekLabel(currentWeek())} is now your current week.`:'Workout saved.');return;}
     if(action==='toggle-milestone') {const k=`w${target.dataset.week}`;state.milestones[k]=!state.milestones[k];persist();render();return;}
     if(action==='reset') {if(confirm('Clear all RepState workouts, check-ins, and settings from this browser? This cannot be undone unless you have a backup.')){localStorage.removeItem(currentStorageKey());localStorage.removeItem(syncBaseStorageKey());state=structuredClone(defaults);stateSnapshot=JSON.parse(JSON.stringify(state));closeModal();render();showToast('Local data cleared.');}return;}
   }
@@ -780,7 +792,7 @@
     const pageButton=e.target.closest('[data-page]');
     if(pageButton){const page=pageButton.dataset.page;if(page){state.ui.page=page;state.ui.day='all';persist();document.querySelector('#sidebar')?.classList.remove('open');render();window.scrollTo({top:0,behavior:'smooth'});}return;}
     const action=e.target.closest('[data-action]');if(action){clickAction(action,e.target);return;}
-    const day=e.target.closest('[data-day]');if(day){state.ui.day=day.dataset.day;persist();render();return;}
+    const day=e.target.closest('.day-tab[data-day]');if(day){state.ui.day=day.dataset.day;persist();render();return;}
     if(e.target.id==='mobile-menu'){document.querySelector('#sidebar')?.classList.toggle('open');return;}
   });
   document.addEventListener('input', e=>{
@@ -788,19 +800,25 @@
     if(!el.matches('[data-set][data-field]'))return;
     const card=el.closest('.exercise-card'),id=card?.dataset.card,index=Number(el.dataset.set),field=el.dataset.field;
     if(!id||!['load','reps','rir'].includes(field))return;
+    pinCurrentWeek();
     const entry=state.logs[id]||{status:'Planned',sets:[]};
     const sets=[...(entry.sets||[])];sets[index]={...(sets[index]||{}),[field]:el.value};
     const updated={...entry,sets};
     const row=program.exercises.find(exercise=>exercise.id===id);
     const status=loggedSetCount(updated)?(row?automaticExerciseStatus(row,updated):'Partial'):'Planned';
     state.logs[id]={...entry,status,sets};
+    if(row && loggedSetCount(updated)) ensureSessionDate(row.week,row.day);
+    advanceCompletedWeek();
     const pill=card.querySelector('.status-pill');if(pill){pill.textContent=status;pill.className=`status-pill ${status}`;}
     const skip=card.querySelector('[data-action="toggle-skip"]');
     if(skip){skip.hidden=!!loggedSetCount(updated)||!['Planned','Skipped'].includes(status);skip.textContent=status==='Skipped'?'Undo skip':'Skip';}
     persist();
-    const dateInput=document.querySelector('#session-date');
+    const dateInput=document.querySelector('.session-date-display');
     if(dateInput){
       const week=Number(dateInput.dataset.week),day=dateInput.dataset.day,rows=weekRows(week).filter(r=>r.day===day);
+      const dateText=dateInput.querySelector('strong'); if(dateText) dateText.textContent=sessionDate(week,day)?shortDate(sessionDate(week,day)):'Set automatically when you log';
+      const dateEditor=dateInput.querySelector('#session-date'); if(dateEditor && document.activeElement!==dateEditor) dateEditor.value=sessionDate(week,day);
+      updateShell();
       const complete=rows.filter(r=>statusOf(r.id)==='Done').length;
       const missing=rows.filter(r=>!['Done','Skipped'].includes(statusOf(r.id))).length;
       const summary=`${complete} complete · ${missing} need work`,dayStatus=groupedDayStatus(week,day);
@@ -822,18 +840,17 @@
   }
   function saveSessionDateInput(el, commit=true) {
     const key=`${el.dataset.week}|${el.dataset.day}`, value=el.value || '';
-    // Native date fields emit empty/intermediate values while typing; wait for a committed clear.
-    if(!commit && !value) return false;
+    // Do not replace an existing date with an intermediate or empty input.
+    if(!value) { if(commit) { el.value=sessionDate(Number(el.dataset.week),el.dataset.day); showToast('Choose a valid date.'); } return false; }
     if(value && !validISODate(value)) {
       if(!commit) return false;
       el.value=sessionDate(Number(el.dataset.week),el.dataset.day) || '';
       showToast('Enter a valid calendar date.');
       return false;
     }
-    // Keep an explicit empty value as a tombstone for synced/custom dates; sessionDate falls back to the plan date.
     state.sessionDates[key]=value;
     persist();
-    if(!value && commit) el.value=sessionDate(Number(el.dataset.week),el.dataset.day) || '';
+    const display=document.querySelector('.session-date-display strong'); if(display) display.textContent=shortDate(value);
     return true;
   }
   document.addEventListener('input', e=>{
@@ -850,7 +867,7 @@
   document.addEventListener('submit', e=>{
     if(e.target.id==='settings-form'){
       e.preventDefault();const f=new FormData(e.target);
-      state.settings={...state.settings,startDate:String(f.get('startDate')||''),loadUnit:String(f.get('loadUnit')||'kg'),bodyUnit:String(f.get('bodyUnit')||'kg'),phase:String(f.get('phase')||'Bulk')};
+      state.settings={...state.settings,loadUnit:String(f.get('loadUnit')||'kg'),bodyUnit:String(f.get('bodyUnit')||'kg'),phase:String(f.get('phase')||'Bulk')};
       state.ui.week=null;persist();closeModal();render();showToast('Cycle settings saved.');return;
     }
     if(e.target.id==='checkin-form'){
@@ -876,7 +893,8 @@
       if(!response.ok)throw new Error('Program data not available');
       program=await response.json();
       program.exercises.forEach((r,i)=>r.id=`${r.week}:${i}`);
-      state.ui.week=state.ui.week||currentWeek();
+      if(advanceCompletedWeek()) persist();
+      state.ui.week=currentWeek();state.ui.day='all';
       render();
       await restoreSyncSession();
       window.setInterval(()=>{if(syncInfo.loggedIn&&!document.hidden)syncNow(false);},30000);

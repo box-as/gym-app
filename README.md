@@ -4,17 +4,16 @@ RepState is a browser-based hypertrophy tracker with a 44-week plan, workout log
 
 User-added extra sets are labeled separately from planned sets and can be removed; a short Undo option restores a removed set and its logged values.
 
-## Volume completion and flexible session dates
+## Program weeks and session dates
+Program weeks advance when all movements in the current week are complete or explicitly skipped, with at least one completed movement. Skipping calendar weeks does not advance the program. The week selector lets you browse other weeks without changing your current week. Existing accounts resume their saved current week, or their latest worked week if none was saved; the original start date remains stored but no longer drives the program.
 
-Muscle-group volume completion compares positive-rep prescribed sets against the selected week's actual exercise prescriptions, including Cut and deload adjustments. Completing every prescribed set gives 100% for each prescribed muscle group. Extra completed sets appear separately and do not cover missing prescribed sets; load-only entries are not completed sets.
+The first logged load or reps, copied working sets, or finished workout records the local date for that session automatically. Open **Edit date** only to correct it; changes save automatically. Already saved dates and records are kept unchanged. Previously suggested dates that were never saved are not represented as actual session dates.
 
-In **Training log**, select the original planned-day tab, then edit **Session date** and choose **Save date**, or tap **Today**. For example, keep Tuesday's Lower A workout on its Tuesday tab but date it Wednesday; set the remaining workouts' dates individually through Saturday. Dates do not automatically shift the rest of the plan, move exercise logs, or change the program week. Clearing the date restores the scheduled fallback. Custom dates sync using the existing per-session records.
+Week 44 is the end of the current cycle and remains marked complete. This version deliberately does not reset or reuse Week 1 because that would replace prior-cycle records. Export a backup before planning a new cycle.
 
-## Active program week
+Muscle-group volume uses positive-rep prescribed sets against each week's actual phase/deload prescription. Extra sets are separate, can be removed with Undo, and do not cover missing prescribed sets. Prior recorded weights/reps remain available while logging.
 
-In **Training log**, choose a week and select **Set selected as current** to save it as your active week. The **Current week** button then returns to that saved week instead of recalculating it from the program start date. **Use start-date week** removes the override. The setting is stored with the signed-in account's settings and syncs only to that account; it does not change the original start date, workouts, or check-ins. Choosing a week in the selector alone remains temporary.
-
-Regression checks: `node tests/repstate_frontend.test.js` and `python3 tests/server_integration_test.py`. The API tests use only a temporary local SQLite database and test accounts, not production accounts or storage. See `UPDATE-2026-11-19.md` for active-week behavior and this bundle's deployment status; `UPDATE-2026-10-21.md` records the preceding volume and session-date changes.
+Run `node tests/repstate_frontend.test.js` and `python3 tests/server_integration_test.py` to check behavior using disposable local data. Historical update notes describe earlier versions, not the behavior or deployment status of this release.
 
 ## Self-hosted accounts and sync
 

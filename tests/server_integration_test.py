@@ -37,9 +37,10 @@ class ServerIntegration(unittest.TestCase):
         a=self.register('alice-test'); b=self.register('bob-test')
         state={'settings':{'phase':'Bulk','startDate':'2024-01-01','activeWeek':5},'logs':{'1:extra':{'sets':[{'reps':12,'load':80,'extraSet':True}]}},'sessionDates':{'1|Tuesday — Lower A':'2025-01-07'},'checkins':{},'milestones':{},'syncMeta':{}}
         s,x=a.request('PUT','/api/state',{'state':state,'revision':0}); self.assertEqual(s,200,x); self.assertEqual(x['revision'],1)
+        self.assertEqual(Client(self.port).request('GET','/api/state')[0],401,'state is never readable without the account session')
         self.assertEqual(b.request('GET','/api/state')[1],{'state':None,'revision':0,'updatedAt':None})
         s,x=a.request('GET','/api/state'); self.assertEqual(s,200); self.assertEqual(x['state'],state); self.assertEqual(x['state']['settings']['activeWeek'],5); self.assertEqual(x['state']['logs']['1:extra']['sets'][0]['extraSet'],True)
-        s,x=b.request('PUT','/api/state',{'state':{'logs':{'bob':{'sets':[{'reps':8}]}}},'revision':0}); self.assertEqual(s,200)
+        s,x=b.request('PUT','/api/state',{'state':{'logs':{'bob':{'sets':[{'reps':8}]} }},'revision':0}); self.assertEqual(s,200)
         self.assertNotEqual(a.request('GET','/api/state')[1]['state'], b.request('GET','/api/state')[1]['state'])
         self.assertNotIn('activeWeek',b.request('GET','/api/state')[1]['state'].get('settings',{}),'another account must not inherit the active week')
     def test_revision_conflict_and_account_survives_restart(self):

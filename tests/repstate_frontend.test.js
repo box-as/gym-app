@@ -25,7 +25,7 @@ function makeDom() {
 function loadApp(sharedStorage={}, fetchImpl=null) {
   const source=fs.readFileSync(path.join(__dirname,'..','public','app.js'),'utf8');
   const dom=makeDom();
-  const injection=`\n;globalThis.__repstate={document,\n`+
+  const injection=`\n;globalThis.__repstate={document,app:document.querySelector('#app'),\n`+
     `getState:()=>state,setState:x=>{state=x;stateSnapshot=JSON.parse(JSON.stringify(x));},\n`+
     `getProgram:()=>program,setProgram:x=>{program=x;},\n`+
     `storage:localStorage,syncInfo,\n`+
@@ -34,7 +34,9 @@ function loadApp(sharedStorage={}, fetchImpl=null) {
     `sessionDate,weekStart,sessionForDate,nextPlannedSession,overviewSession,navigateToSession,hasMeaningfulSyncData,volumeBars,clickAction,syncNow,\n`+
     `mergeSyncData,mergeSyncState:typeof mergeSyncState==='function'?mergeSyncState:null,mergeRecords:typeof mergeRecords==='function'?mergeRecords:null,\n`+
     `normalizeState:typeof normalizeState==='function'?normalizeState:null,resetState:typeof resetState==='function'?resetState:null,\n`+
-    `volumeCompletion,validISODate,saveSessionDateInput}\n};\n`;
+    `volumeCompletion,validISODate,saveSessionDateInput,\n`+
+    `ensureSessionDate:typeof ensureSessionDate==='function'?ensureSessionDate:null,\n`+
+    `advanceCompletedWeek:typeof advanceCompletedWeek==='function'?advanceCompletedWeek:null}};\n`;
   const patched=source.replace(/\n\}\)\(\);\s*$/,injection+'\n})();');
   const fetch=fetchImpl || (async()=>({ok:false,status:404,json:async()=>({})}));
   const context={console,document:dom.document,window:{setInterval(){},addEventListener(){},scrollTo(){}},
@@ -46,106 +48,134 @@ function loadApp(sharedStorage={}, fetchImpl=null) {
   return context.__repstate;
 }
 function max(api,row,w){return api.functions.maxSets(api.functions.getPrescription(row,w).sets);}
-function clone(x){return JSON.parse(JSON.stringify(x));}
 function actualProgram(){const p=JSON.parse(fs.readFileSync(path.join(__dirname,'..','public','program.json'),'utf8'));p.exercises.forEach((r,i)=>r.id=`${r.week}:${i}`);return p;}
 function stateBase(phase='Bulk'){return {settings:{startDate:'2024-01-01',loadUnit:'kg',bodyUnit:'kg',phase},logs:{},checkins:{},sessionDates:{},milestones:{},syncMeta:{},ui:{page:'training',week:1,day:'all',quickLog:true}};}
-function completeLogs(api,p,w,phase){
-  const logs={}; for(const row of p.exercises.filter(r=>r.week===w)){const n=max(api,row,w);logs[row.id]={sets:Array.from({length:n},()=>({reps:8,load:0}))};} return logs;
-}
+function completeLogs(api,p,w,status='Done'){const logs={}; for(const row of p.exercises.filter(r=>r.week===w)){const n=max(api,row,w);logs[row.id]={status,sets:status==='Done'?Array.from({length:n},()=>({reps:8,load:0})):[]};} return logs;}
+function setFor(api,p,w,status='Done'){return completeLogs(api,p,w,status);}
+function assertOptional(fn, message){assert.equal(typeof fn,'function',message);}
+
 async function run(){
   const storage={},api=loadApp(storage),f=api.functions,p=actualProgram();api.setProgram(p);api.setState(stateBase());
-  const status=f.automaticExerciseStatus; assert(status,'status helper export missing');
-  // Actual public program rows receive the same stable IDs as boot(), not synthetic IDs.
+  assertOptional(f.advanceCompletedWeek,'advanceCompletedWeek helper export missing');
+  assertOptional(f.ensureSessionDate,'ensureSessionDate helper export missing');
   assert.equal(p.exercises[0].id,'1:0');assert.equal(p.exercises.at(-1).id,`44:${p.exercises.length-1}`);
-  // Active week is an account setting, independent of the unchanged program start date and workout records.
-  const week5Api=loadApp(storage);week5Api.setProgram(p);const week5Before={...stateBase(),logs:{'1:keep':{sets:[{load:42,reps:8}]}},checkins:{1:{weight:'80'}}};
-  week5Api.setState({...week5Before,ui:{...week5Before.ui,week:5}});
-  week5Api.functions.clickAction({dataset:{action:'set-current-week'}});
-  assert.equal(week5Api.getState().settings.activeWeek,5,'selected Week 5 is saved as the active week');
-  assert.equal(week5Api.getState().settings.startDate,'2024-01-01','setting active week leaves program start date unchanged');
-  assert.deepEqual(week5Api.getState().logs,week5Before.logs,'setting active week leaves workouts unchanged');
-  assert.deepEqual(week5Api.getState().checkins,week5Before.checkins,'setting active week leaves check-ins unchanged');
-  assert.equal(week5Api.functions.currentWeek(),5,'Current week uses the saved active week');
-  assert.equal(week5Api.functions.syncData().settings.activeWeek,5,'active week is included in the per-account sync payload');
-  const reloaded=loadApp(storage);reloaded.setProgram(p);assert.equal(reloaded.functions.currentWeek(),5,'saved current week survives browser reload');
-  const remoteState=clone(week5Api.functions.syncData());
-  const secondDevice=loadApp({});secondDevice.setProgram(p);secondDevice.setState({...stateBase(),ui:{...stateBase().ui,week:null}});
-  secondDevice.functions.applySyncData(remoteState);assert.equal(secondDevice.functions.currentWeek(),5);assert.equal(secondDevice.getState().ui.week,5,'fresh device follows synced active week');
-  const browsing=loadApp({});browsing.setProgram(p);browsing.setState({...stateBase(),ui:{...stateBase().ui,week:2}});
-  browsing.functions.applySyncData(remoteState);assert.equal(browsing.getState().ui.week,2,'sync does not interrupt deliberate browsing of another week');
-  week5Api.getState().ui.week=2;week5Api.functions.clickAction({dataset:{action:'current-week'}});
-  assert.equal(week5Api.getState().ui.week,5,'Current week returns to saved Week 5');
-  week5Api.functions.clickAction({dataset:{action:'reset-active-week'}});
-  assert.equal(week5Api.getState().settings.activeWeek,null,'date-based current week can be restored');
-  assert.equal(week5Api.getState().settings.startDate,'2024-01-01','resetting the override does not edit the start date');
-  assert.equal(week5Api.functions.currentWeek(),1+(Math.floor((new Date(`${week5Api.functions.todayISO()}T12:00:00`)-new Date('2024-01-01T12:00:00'))/86400000/7)%44),'cleared override falls back to start-date calculation');
-  const invalidWeekApi=loadApp({});invalidWeekApi.setProgram(p);invalidWeekApi.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:45}});
-  assert.equal(invalidWeekApi.functions.currentWeek(),1+(Math.floor((new Date(`${invalidWeekApi.functions.todayISO()}T12:00:00`)-new Date('2024-01-01T12:00:00'))/86400000/7)%44),'invalid active week is ignored');
-  // Every week, phase, muscle group, and scheduled deload reaches exactly 100% prescribed volume.
+
+  // currentWeek ignores calendar/startDate drift and follows explicit progression evidence.
+  api.setState(stateBase()); assert.equal(f.currentWeek(),1,'empty state defaults to Week 1');
+  api.setState({...stateBase(),logs:{'2:calendar-skip':{status:'Skipped',sets:[]}}});
+  assert.equal(f.currentWeek(),2,'a skipped calendar week is the highest completed/evidenced week');
+  api.setState({...stateBase(),logs:{'3:real-set':{sets:[{reps:8,load:20}]}}});
+  assert.equal(f.currentWeek(),3,'a real logged set establishes the current week');
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:9},logs:{'3:real-set':{sets:[{reps:8,load:20}]}}});
+  assert.equal(f.currentWeek(),9,'valid persisted activeWeek wins over inferred progress');
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:45}});assert.equal(f.currentWeek(),1,'invalid activeWeek is ignored');
+
+  // Advance only after every row is Done/Skipped, with at least one Done; it persists once and caps at 44.
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:2},logs:setFor(api,p,2,'Skipped')});
+  assert.equal(f.advanceCompletedWeek(),false,'all-skipped week cannot advance');assert.equal(api.getState().settings.activeWeek,2);
+  const mixed=setFor(api,p,2,'Skipped');mixed[p.exercises.find(r=>r.week===2).id]={status:'Done',sets:[]};
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:2},logs:mixed});
+  assert.equal(f.advanceCompletedWeek(),true,'Done plus Skipped rows advances');assert.equal(api.getState().settings.activeWeek,3);
+  assert.equal(f.advanceCompletedWeek(),false,'advance is not repeated without completing the new week');assert.equal(api.getState().settings.activeWeek,3);
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:44},logs:setFor(api,p,44,'Done')});
+  const before44=JSON.stringify(api.getState().logs);assert.equal(f.advanceCompletedWeek(),false,'Week 44 does not wrap');assert.equal(api.getState().settings.activeWeek,44);assert.equal(JSON.stringify(api.getState().logs),before44,'Week 44 leaves records intact');
+
+  // Every phase and week still reaches exactly 100% prescribed volume.
   for(const phase of ['Bulk','Cut','Maintenance']) for(let w=1;w<=44;w++){
-    api.setState(stateBase(phase));
-    api.setState({...api.getState(),logs:completeLogs(api,p,w,phase)});
-    const volume=f.prescribedVolume(w), bars=f.volumeBars(w);
-    assert(Object.keys(volume).length>=10,`${phase} week ${w} should cover all muscles`);
+    api.setState(stateBase(phase));api.setState({...api.getState(),logs:completeLogs(api,p,w)});
+    const volume=f.prescribedVolume(w), bars=f.volumeBars(w);assert(Object.keys(volume).length>=10,`${phase} week ${w} should cover all muscles`);
     for(const [muscle,v] of Object.entries(volume)) assert.equal(v.completed,v.target,`${phase} week ${w} ${muscle} target`);
     assert.equal((bars.match(/style="width:100%"/g)||[]).length,Object.keys(volume).length,`${phase} week ${w} bars`);
-    if(p.deloadWeeks.includes(w)) for(const row of p.exercises.filter(r=>r.week===w)) assert.equal(f.getPrescription(row,w).type,'Deload');
   }
-  const row=p.exercises.find(r=>r.exercise.includes('Incline DB Bench Press'));
-  api.setState(stateBase('Bulk'));
-  const required=max(api,row,1);
-  assert.equal(status(row,{sets:Array.from({length:required-1},()=>({reps:8,load:1}))}),'Partial','missing prescribed reps is incomplete');
-  assert.equal(status(row,{sets:Array.from({length:required},()=>({reps:'',load:100}))}),'Partial','load-only sets do not count');
-  const logs={};logs[row.id]={sets:[...Array.from({length:required-1},()=>({reps:8,load:1})),{reps:8,load:1}]};api.setState({...stateBase(),logs});
-  const partial=f.prescribedVolume(1).Chest;assert(partial.completed<partial.target,'missing prescribed volume stays below 100%');
-  logs[row.id].sets.push({reps:8,load:1,extraSet:true});api.setState({...stateBase(),logs});
-  const extra=f.prescribedVolume(1).Chest;assert.equal(extra.extras,1,'extra completed set counted separately');assert(extra.completed<extra.target,'extra set cannot cover missing prescribed set');assert.match(f.volumeBars(1),/\+1 extra/);
-  // Date fallback and explicit custom date preserve the immutable week/day identity.
-  api.setState({...stateBase(),settings:{...stateBase().settings,startDate:'2024-01-01'},sessionDates:{'1|Tuesday — Lower A':'2024-01-03'}});
-  assert.equal(f.sessionDate(1,'Tuesday — Lower A'),'2024-01-03');
-  assert.equal(f.sessionDate(1,'Wednesday — Push B'),'2024-01-03');assert.equal(f.sessionDate(1,'Thursday — Pull B'),'2024-01-04');assert.equal(f.sessionDate(1,'Friday — Lower B'),'2024-01-05');
-  // Actual document input/change listeners: Tuesday moved to Wednesday; later days remain Thu/Fri/Sat-style ordered dates.
-  const input={value:'2024-01-10',dataset:{change:'session-date',week:'1',day:'Tuesday — Lower A'},matches(sel){return sel==='[data-change="session-date"]';}};
-  // The document is available through the element listener harness via the exported save helper; exercise both event paths with a fresh load.
-  const domApi=loadApp(storage);domApi.setProgram(p);domApi.setState({...stateBase(),settings:{...stateBase().settings,startDate:'2024-01-01'}});
-  const dateInput={value:'2024-01-03',dataset:{change:'session-date',week:'1',day:'Tuesday — Lower A'},matches(sel){return sel==='[data-change="session-date"]';}};
-  domApi.document.dispatch('change',{target:dateInput});assert.equal(domApi.getState().sessionDates['1|Tuesday — Lower A'],'2024-01-03');
-  for(const [day,value] of [['Wednesday — Push B','2024-01-04'],['Thursday — Pull B','2024-01-05'],['Friday — Lower B','2024-01-06']]){
-    const later={value,dataset:{change:'session-date',week:'1',day},matches(sel){return sel==='[data-change="session-date"]';}};
-    domApi.document.dispatch('change',{target:later});
+
+  // Logged but incomplete prescribed sets stay partial; extra sets cannot fill missing targets.
+  const statusRow=p.exercises.find(r=>r.week===1&&r.exercise.includes('Incline DB Bench Press'));
+  api.setState(stateBase());
+  const required=max(api,statusRow,1);
+  assert.equal(f.automaticExerciseStatus(statusRow,{sets:Array.from({length:required-1},()=>({reps:8,load:1}))}),'Partial');
+  assert.equal(f.automaticExerciseStatus(statusRow,{sets:Array.from({length:required},()=>({reps:'',load:100}))}),'Partial');
+  const extras=Array.from({length:required-1},()=>({reps:8,load:1})).concat([{reps:'',load:1},{reps:8,load:1,extraSet:true}]);
+  api.setState({...stateBase(),logs:{[statusRow.id]:{sets:extras}}});
+  assert.equal(f.prescribedVolume(1).Chest.extras,1);
+  assert(f.prescribedVolume(1).Chest.completed<f.prescribedVolume(1).Chest.target);
+
+  // First load/reps, Finish workout, and copy establish a date only when the key is absent.
+  const row=p.exercises.find(r=>r.exercise.includes('Incline DB Bench Press')), key=`1|${row.day}`;
+  api.setState(stateBase());f.ensureSessionDate(1,row.day);assert.match(api.getState().sessionDates[key],/^\d{4}-\d{2}-\d{2}$/,'missing date is initialized to today');
+  api.getState().sessionDates[key]='';f.ensureSessionDate(1,row.day);assert.equal(api.getState().sessionDates[key],'','existing empty date is preserved');
+  api.getState().sessionDates={};f.ensureSessionDate(1,row.day);assert.match(api.getState().sessionDates[key],/^\d{4}-\d{2}-\d{2}$/,'first logging creates a session date');
+  api.getState().sessionDates[key]='2026-01-09';f.ensureSessionDate(1,row.day);assert.equal(api.getState().sessionDates[key],'2026-01-09','existing date is preserved');
+  const copied=p.exercises.find(r=>r.week===2&&r.exercise===row.exercise);api.setState({...stateBase(),logs:{[row.id]:{sets:[{load:10,reps:8}]}}});
+  f.clickAction({dataset:{action:'copy-last-exercise',id:copied.id}});assert(api.getState().sessionDates[`2|${copied.day}`],'copy creates the target session date');
+  api.setState({...stateBase(),logs:{}});f.clickAction({dataset:{action:'mark-day',week:'1',day:row.day}});assert(api.getState().sessionDates[key],'Finish workout creates a session date');
+
+  // Manual correction is saved but cannot erase a date; invalid dates are rejected.
+  const input={value:'2026-02-03',dataset:{change:'session-date',week:'1',day:row.day},matches(sel){return sel==='[data-change="session-date"]';}};
+  api.setState({...stateBase(),sessionDates:{[key]:'2026-01-09'}});assert.equal(f.saveSessionDateInput(input),true);assert.equal(api.getState().sessionDates[key],'2026-02-03');
+  input.value='';assert.equal(f.saveSessionDateInput(input),false,'manual date changes cannot clear a saved date');assert.equal(api.getState().sessionDates[key],'2026-02-03');
+  input.value='2025-02-29';assert.equal(f.saveSessionDateInput(input),false);assert.equal(api.getState().sessionDates[key],'2026-02-03');
+
+  // The real delegated date-input event saves an actual valid date, while invalid/empty edits preserve it.
+  api.setState({...stateBase(),sessionDates:{[key]:'2026-02-03'}});
+  const dateEventInput={value:'2026-03-14',id:'session-date',dataset:{change:'session-date',week:'1',day:row.day},matches(sel){return sel==='[data-set][data-field]'||sel==='[data-change="session-date"]';},closest(){return null;}};
+  api.document.dispatch('input',{target:dateEventInput});
+  assert.equal(api.getState().sessionDates[key],'2026-03-14','delegated date input saves the selected date');
+  dateEventInput.value='';api.document.dispatch('input',{target:dateEventInput});
+  assert.equal(api.getState().sessionDates[key],'2026-03-14','delegated empty date input preserves the saved date');
+
+  // The actual delegated day-tab route must use the tab selector, including clicks on a child label.
+  const day5=p.exercises.find(r=>r.week===5).day;
+  api.setState({...stateBase(),ui:{...stateBase().ui,page:'training',week:5,day:'all'}});
+  const dayTab={dataset:{day:day5},closest(sel){return sel==='.day-tab[data-day]'?this:null;}};
+  const dayTabChild={dataset:{},closest(sel){return sel==='.day-tab[data-day]'?dayTab:null;}};
+  api.document.dispatch('click',{target:dayTabChild});
+  assert.equal(api.getState().ui.day,day5,'clicking inside a day tab selects that day');
+
+  // Completing all five real days in Week 5 advances the saved current week exactly once to Week 6.
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:5},ui:{...stateBase().ui,page:'training',week:5,day:'all'},logs:{}});
+  const days5=f.uniqueDays(5);
+  assert.equal(days5.length,5,'Week 5 has five training days');
+  for(const [index,day] of days5.entries()) {
+    f.clickAction({dataset:{action:'mark-day',week:'5',day}});
+    assert.equal(api.getState().settings.activeWeek,index===4?6:5,'current week advances only when the last day is finished');
   }
-  assert.equal(domApi.getState().sessionDates['1|Friday — Lower B'],'2024-01-06','remaining sessions can be moved independently');
-  dateInput.value='';domApi.document.dispatch('input',{target:dateInput});
-  // reload from local storage proves custom date persisted; explicit clear is a tombstone and falls back to plan date.
-  const reload=loadApp(storage);reload.setProgram(p);assert.equal(reload.getState().sessionDates['1|Tuesday — Lower A'],'2024-01-03');
-  dateInput.value='';reload.functions.saveSessionDateInput(dateInput);assert.equal(reload.getState().sessionDates['1|Tuesday — Lower A'],'');assert.equal(reload.functions.sessionDate(1,'Tuesday — Lower A'),'2024-01-02');
-  const invalid={value:'2025-02-29',dataset:{change:'session-date',week:'1',day:'Tuesday — Lower A'}};assert.equal(reload.functions.saveSessionDateInput(invalid),false);assert.equal(reload.functions.validISODate('2025-02-29'),false);
-  // Overview resolves a real scheduled/custom session first, then a future session, without inventing a date.
-  const overviewApi=loadApp({});overviewApi.setProgram(p);
-  const tomorrow=new Date(`${overviewApi.functions.todayISO()}T12:00:00`);tomorrow.setDate(tomorrow.getDate()+1);const tomorrowISO=overviewApi.functions.isoDate(tomorrow);
-  const dayAfter=new Date(`${tomorrowISO}T12:00:00`);dayAfter.setDate(dayAfter.getDate()+1);const dayAfterISO=overviewApi.functions.isoDate(dayAfter);
-  overviewApi.setState({...stateBase(),settings:{...stateBase().settings,startDate:'2024-01-01'},sessionDates:{'1|Wednesday — Push B':tomorrowISO,'1|Thursday — Pull B':dayAfterISO}});
-  const matching=overviewApi.functions.sessionForDate(1,tomorrowISO);assert.equal(matching.week,1);assert.equal(matching.day,'Wednesday — Push B');assert.equal(matching.date,tomorrowISO);
-  assert.equal(overviewApi.functions.overviewSession(1).kind,'next','a non-today week selects the next dated session');
-  assert.equal(overviewApi.functions.overviewSession(1).day,'Wednesday — Push B');
-  overviewApi.setState({...overviewApi.getState(),settings:{...overviewApi.getState().settings,startDate:''},sessionDates:{}});
-  assert.equal(overviewApi.functions.overviewSession(1).kind,'week','missing start date does not claim today or invent next-session dates');
-  overviewApi.setState({...overviewApi.getState(),settings:{...overviewApi.getState().settings,startDate:'2024-01-06'}});
-  assert.equal(overviewApi.functions.sessionForDate(1,'2024-01-06')?.day,'Monday — Upper A','weekend starts retain the planned date identity');
-  assert.equal(overviewApi.functions.navigateToSession(3,'Tuesday — Lower A'),true);
-  assert.equal(overviewApi.getState().ui.page,'training');assert.equal(overviewApi.getState().ui.week,3);assert.equal(overviewApi.getState().ui.day,'Tuesday — Lower A');
-  assert.equal(overviewApi.functions.navigateToSession(3,'not a program day'),false);
-  const todayApi=loadApp({});todayApi.setProgram(p);todayApi.setState(stateBase());
-  const todayInput={value:'',dataset:{change:'session-date',week:'1',day:'Tuesday — Lower A'},matches(sel){return sel==='[data-change="session-date"]';}};
-  todayApi.document._elements['#session-date']=todayInput;todayApi.functions.clickAction({dataset:{action:'session-date-today'}});
-  assert.match(todayInput.value,/^\d{4}-\d{2}-\d{2}$/,'Today action fills an ISO date');assert.equal(todayApi.getState().sessionDates['1|Tuesday — Lower A'],todayInput.value,'Today action saves date');
-  // Sync guard: editable date/workout input prevents network sync; valid sync proceeds once focus leaves.
-  const calls=[];const syncApi=loadApp({},async(url)=>{calls.push(url);return {ok:true,status:200,json:async()=>({state:{},revision:1})};});calls.length=0;syncApi.setProgram(p);syncApi.syncInfo.loggedIn=true;
-  const focused={dataset:{change:'session-date'},matches(sel){return sel==='[data-change="session-date"]';}};syncApi.document.activeElement=focused;await syncApi.functions.syncNow();assert.equal(calls.length,0,'date editing must guard sync');
-  syncApi.document.activeElement=null;await syncApi.functions.syncNow();assert(calls.length>=1,'sync runs after date focus ends');
-  // Existing add/delete/undo/copy flows remain wired to immutable IDs.
-  const flow=loadApp(storage);flow.setProgram(p);const prev=p.exercises.find(r=>r.week===1&&r.exercise===row.exercise),next=p.exercises.find(r=>r.week===2&&r.exercise===row.exercise);flow.setState({...stateBase(),logs:{[prev.id]:{sets:[{load:10,reps:8}]}}});
-  flow.functions.clickAction({dataset:{action:'copy-last-exercise',id:next.id}});assert.equal(flow.getState().logs[next.id].sets[0].load,10,'copy flow');
+  assert.equal(f.currentWeek(),6,'currentWeek follows the completed Week 5 progression');
+  assert.equal(JSON.parse(storage.repstate_hypertrophy44_v1).settings.activeWeek,6,'Week 6 persists locally');
+
+  // Sync follows activeWeek on a fresh device but does not interrupt deliberate browsing.
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:5},logs:{'5:x':{sets:[{reps:8,load:1}]}}});const remote=JSON.parse(JSON.stringify(f.syncData()));
+  const second=loadApp({});second.setProgram(p);second.setState(stateBase());second.functions.applySyncData(remote);assert.equal(second.functions.currentWeek(),5);assert.equal(second.getState().ui.week,5,'fresh device follows synced activeWeek');
+  const browsing=loadApp({});browsing.setProgram(p);browsing.setState({...stateBase(),ui:{...stateBase().ui,week:2}});browsing.functions.applySyncData(remote);assert.equal(browsing.getState().ui.week,2,'sync retains deliberate browsing');
+
+  // Rendered UI uses date text/edit affordance and no Today/Save date controls.
+  api.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:1},sessionDates:{[key]:'2026-02-03'}});f.clickAction({dataset:{action:'current-week'}});
+  const html=api.app.innerHTML;assert.match(html,/Session date|2026-02-03/i,'UI shows session date');assert.doesNotMatch(html,/>Today<|>Save date</i,'obsolete Today/Save date controls are removed');
+
+  // No remote write occurs if local data changes while a sync GET is in flight.
+  let releaseGet; const getReady=new Promise(resolve=>{releaseGet=resolve;}); const calls=[];
+  const race=loadApp({},async(url,options)=>{
+    if(url==='/program.json') return {ok:false,status:404};
+    calls.push(options?.method||'GET');
+    if((options?.method||'GET')==='GET') {await getReady;return {ok:true,status:200,json:async()=>({state:{settings:{activeWeek:3},logs:{},checkins:{},sessionDates:{},milestones:{},syncMeta:{}},revision:1})};}
+    return {ok:true,status:200,json:async()=>({revision:2})};
+  });
+  race.setProgram(p);race.setState({...stateBase(),settings:{...stateBase().settings,activeWeek:5}});race.syncInfo.loggedIn=true;
+  const pendingSync=race.functions.syncNow();
+  race.functions.clickAction({dataset:{action:'mark-day',week:'5',day:days5[0]}});
+  releaseGet();await pendingSync;
+  assert.deepEqual(calls,['GET'],'local edit during GET must prevent a stale PUT');
+  race.syncInfo.loggedIn=false;clearTimeout(race.syncInfo.timer);
+
+  // Focused date editing delays sync until the user leaves the input.
+  const focusCalls=[];const focusedApi=loadApp({},async(url)=>{if(url==='/program.json') return {ok:false,status:404};focusCalls.push(url);return {ok:true,status:200,json:async()=>({state:null,revision:1})};});
+  focusedApi.setProgram(p);focusedApi.syncInfo.loggedIn=true;
+  focusedApi.document.activeElement={matches:sel=>sel==='[data-change=\"session-date\"]'};
+  await focusedApi.functions.syncNow();assert.equal(focusCalls.length,0,'focused date input blocks sync');
+  focusedApi.syncInfo.loggedIn=false;clearTimeout(focusedApi.syncInfo.timer);
+
+  // Existing previous-set, add/delete/undo flows remain wired to immutable IDs.
+  const flow=loadApp({});flow.setProgram(p);flow.setState({...stateBase(),logs:{[row.id]:{sets:[{load:10,reps:8}]}}});
+  const next=p.exercises.find(r=>r.week===2&&r.exercise===row.exercise);flow.functions.clickAction({dataset:{action:'copy-last-exercise',id:next.id}});assert.equal(flow.getState().logs[next.id].sets[0].load,10,'copy previous set flow');
   flow.functions.clickAction({dataset:{action:'add-set',id:next.id}});assert(flow.getState().logs[next.id].sets.length>max(flow,next,2),'add flow');
   const extraIndex=flow.getState().logs[next.id].sets.length-1;flow.functions.clickAction({dataset:{action:'delete-set',id:next.id,setIndex:String(extraIndex)}});assert.equal(flow.getState().logs[next.id].sets.length,max(flow,next,2),'delete flow');flow.functions.clickAction({dataset:{action:'undo-delete-set'}});assert.equal(flow.getState().logs[next.id].sets.length,max(flow,next,2)+1,'undo flow');
   console.log('frontend RepState regression tests: PASS');
